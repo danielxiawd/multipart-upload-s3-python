@@ -12,7 +12,7 @@ import os
 import json
 import boto3
 from concurrent import futures
-from config import srcdir, srcfileIndex, chunksize, splitdir, s3bucket, s3key, MaxRetry, MaxThread, MaunalMerge, IgnoreSmallFile
+from config import srcdir, srcfileIndex, chunksize, splitdir, s3bucket, s3key, MaxRetry, MaxThread, IgnoreSmallFile
 from botocore.exceptions import ClientError, EndpointConnectionError
 import time
 s3client = boto3.client('s3')
@@ -47,9 +47,9 @@ def split(srcfile):  # Split file into parts
     indexfile = open(indexFilename, 'w')
     indexfile.write(json.dumps(indexList))
     indexfile.close()
-    print ""
+    print " "
     print "Complete split, please view for detail: "+indexFilename
-    print ""
+    print " "
     return indexList
 
 def createUpload(srcfile): # create multipart upload
@@ -58,7 +58,7 @@ def createUpload(srcfile): # create multipart upload
         Key=s3key+srcfile,
     )
     print "Create_multipart_upload UploadId: "+response["UploadId"]
-    print ""
+    print " "
     uploadIDFilename = os.path.join(splitdir, srcfile + '-uploadID.ini') # 1个文件的UploadID文件
     uploadIDfile = open(uploadIDFilename, 'w')
     uploadIDfile.write(response["UploadId"])
@@ -131,10 +131,9 @@ def completeUpload(reponse_uploadId, uploadedListParts, srcfile): # complete mul
         MultipartUpload=completeStructJSON  # 重新查询来构建completeStructJSON
     )
     print "Complete all upload and merged UploadId: "+reponse_uploadId
-    print ""
     return response
 
-def printPartList(uploadedListParts): # 打印列出已上传的Parts
+def printPartList(uploadedListParts, indexListLenth): # 打印列出已上传的Parts并与本地比对数量
     print "Uploaded parts included: "
     print "PartNumber       ETag                  LastModified               Size"
     for partObject in uploadedListParts:
@@ -143,8 +142,15 @@ def printPartList(uploadedListParts): # 打印列出已上传的Parts
         LastModified = str(partObject["LastModified"])
         Size = str(partObject["Size"])
         print PartNumber+"  "+ETag+"  "+LastModified+"  "+Size
-    print ""
-    print ""
+    uploadedListPartsLenth = len(uploadedListParts)
+    print " "
+    if uploadedListPartsLenth == indexListLenth:
+        print "Uploaded parts size match.\n"
+        return "sizeMatch"
+    else:
+        print " "
+        print "Warning!!! Uploaded parts size not match as local parts files!\n"
+        return "sizeNotMatch"
 
 def cleanParts(indexList): # 清理临时分片
     for cleanid in indexList:
@@ -225,32 +231,31 @@ if __name__=='__main__':
         # 执行分片upload
         response_uploadpart = uploadPart(reponse_uploadId, indexList, partnumberList, srcfile)
         print "Last uploaded partnumber: "+response_uploadpart
-        print ""
+        print " "
 
-        # 列出S3上全部已完成的Parts
+        # 列出S3上全部已完成的Parts，并与本地比对
         response_uploadedList = s3client.list_parts(
             Bucket=s3bucket,
             Key=s3key+srcfile,
             UploadId=reponse_uploadId,
         )
-        printPartList(response_uploadedList["Parts"]) 
-        
-        # 等待人工确认后再合并
-        if MaunalMerge == 1:
+        indexListLenth = len(indexList)
+        compareResult = printPartList(response_uploadedList["Parts"], indexListLenth)
+        if compareResult == "sizeNotMatch":
             keyinput = ""
             while keyinput <>"Y":
                 keyinput = raw_input("Do you want to process merge? If not, stop and manually merge. (Y/n)")
                 if keyinput == "n":
                     sys.exit()
-        
+
         # 合并S3上的文件
         response_complete = completeUpload(reponse_uploadId, response_uploadedList["Parts"], srcfile)
-        print ""
+        print " "
         print "Finish: "+json.dumps(response_complete["Location"])
 
         # 删除本地临时分片文件
         cleanParts(indexList)
-        print ""
+        print " "
         print "Clearn local parts complete. "
-        print ""
+        print " "
     print "Complete all files in folder: "+srcdir

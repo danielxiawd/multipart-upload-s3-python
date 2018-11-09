@@ -48,7 +48,7 @@ MaxThread = 3
 # 上传完成之后合并那一步是否等待人工确认, 数字1为需要等待人工确认，用于定位故障
 # type = int
 # 默认为0，不需人工确认，自动合并
-MaunalMerge = 0
+# MaunalMerge = 0
 
 # 是否跳过小于chunksize的小文件
 # 数字0为不跳过, 为1则跳过
