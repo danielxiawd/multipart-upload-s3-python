@@ -22,6 +22,8 @@ by James Huang
 
     pip install boto3
 
+详见 [boto3](https://github.com/boto/boto3) github page
+
 ## AWS 认证配置
 
 You need to set up your AWS security credentials before the sample code is able
@@ -57,6 +59,8 @@ S3 目录前缀 prefix (不含文件名)
 同时上传的线程数量
 * MaunalMerge
 上传完成之后合并那一步是否等待人工确认
+* IgnoreSmallFile
+是否跳过小于chunksize的小文件
 
 ## 运行应用
 
