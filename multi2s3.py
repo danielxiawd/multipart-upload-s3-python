@@ -18,39 +18,44 @@ import time
 s3client = boto3.client('s3')
 
 def split(srcfile):  # Split file into parts
-    indexFilename = os.path.join(splitdir, srcfile + '-indexfile.json')  # 1个文件所有分片的索引文件
-    partnumber =0
-    inputfile = open(os.path.join(srcdir, srcfile), 'rb')
-    indexList = []
-    while True:
-        chunk = inputfile.read(chunksize)
-        if not chunk:
-            break
-        partnumber += 1
-        partFileName = os.path.join(splitdir, srcfile+'-part%04d' % partnumber)
-        print "Split part filename: "+partFileName
-        try:
-            fileobj = open(partFileName, 'wb')  # make partfile
-            fileobj.write(chunk)  # write data into partfile
-            fileobj.close()
-            print "write to part file complete: "+partFileName
-        except IOError as e:
-            print "Can't write to disk: "+partFileName
-            sys.exit()
-        except Exception as e:
-            print str(e)
-            sys.exit()
-        indexList.append(partFileName)
-    inputfile.close()
+    try:
+        partnumber =0
+        inputfile = open(os.path.join(srcdir, srcfile), 'rb')
+        indexList = []
+        while True:
+            chunk = inputfile.read(chunksize)
+            if not chunk:
+                break
+            partnumber += 1
+            partFileName = os.path.join(splitdir, srcfile+'-part%04d' % partnumber)
+            print "Split part filename: "+partFileName
+            try:
+                fileobj = open(partFileName, 'wb')  # make partfile
+                fileobj.write(chunk)  # write data into partfile
+                fileobj.close()
+                print "write to part file complete: "+partFileName
+            except IOError as e:
+                print "Can't write to disk: "+partFileName
+                sys.exit()
+            except Exception as e:
+                print str(e)
+                sys.exit()
+            indexList.append(partFileName)
+        inputfile.close()
 
-    # write to index file
-    indexfile = open(indexFilename, 'w')
-    indexfile.write(json.dumps(indexList))
-    indexfile.close()
-    print " "
-    print "Complete split, please view for detail: "+indexFilename
-    print " "
-    return indexList
+        # write to index file
+        indexFilename = os.path.join(splitdir, srcfile + '-indexfile.json')  # 1个文件所有分片的索引文件
+        indexfile = open(indexFilename, 'w')
+        indexfile.write(json.dumps(indexList))
+        indexfile.close()
+        print " "
+        print "Complete split, please view for detail: "+indexFilename
+        return indexList
+    except Exception as e:
+        print " "
+        print "ERR! Fail on spliting chunks: "+str(e)
+        print " "
+        return []
 
 def createUpload(srcfile): # create multipart upload
     response = s3client.create_multipart_upload(
@@ -219,7 +224,18 @@ if __name__=='__main__':
         except IOError: # 读不到uploadIDFile，即没启动过上传任务
             print "First time handle: "+srcfile
             # 启动文件物理分片
-            response_indexList = split(srcfile) 
+            retrySplit = 3
+            while retrySplit >0:
+                response_indexList = split(srcfile)
+                if response_indexList <> []:
+                    break
+                else:
+                    retrySplit -= 1
+                    print "Retry split chunks..."
+            if retrySplit == 0:
+                print "WARNING!!! Fail on split chunk three times. Check disk space or storage connection."
+                sys.exit()
+                
             # 向S3创建Multipart Upload任务，获取UploadID
             reponse_uploadId = createUpload(srcfile) 
 
@@ -239,8 +255,7 @@ if __name__=='__main__':
             Key=s3key+srcfile,
             UploadId=reponse_uploadId,
         )
-        indexListLenth = len(indexList)
-        compareResult = printPartList(response_uploadedList["Parts"], indexListLenth)
+        compareResult = printPartList(response_uploadedList["Parts"], len(indexList))
         if compareResult == "sizeNotMatch":
             keyinput = ""
             while keyinput <>"Y":
