@@ -11,8 +11,9 @@
 注意：
 采用物理分片模式，注意临时目录的空间要大于上传文件中size最大的那个文件。
 完成上传一个文件并在S3上完成合并后，会自动删除该文件在本地的临时分片。
+拆分片的过程中如果遇到磁盘写入失败，则会重试3次，然后中断并提示，这有助于保护采用共享存储连接临时中断的场景。
 
-Version 0.9
+Version 0.9 
 开发语言：Python 2.7  
 by James Huang
 
@@ -40,7 +41,7 @@ check out the Quickstart section in the [developer guide](https://boto3.readthed
 
 ## 应用配置
 
-修改配置 Config.py 文件，参数说明:
+修改配置 config.py 文件，参数说明:
 * srcdir
 原文件存放目录
 * srcfileIndex
