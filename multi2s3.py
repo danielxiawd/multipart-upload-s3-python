@@ -29,17 +29,10 @@ def split(srcfile):  # Split file into parts
             partnumber += 1
             partFileName = os.path.join(splitdir, srcfile+'-part%04d' % partnumber)
             print "Split part filename: "+partFileName
-            try:
-                fileobj = open(partFileName, 'wb')  # make partfile
-                fileobj.write(chunk)  # write data into partfile
-                fileobj.close()
-                print "write to part file complete: "+partFileName
-            except IOError as e:
-                print "Can't write to disk: "+partFileName
-                sys.exit()
-            except Exception as e:
-                print str(e)
-                sys.exit()
+            fileobj = open(partFileName, 'wb')  # make partfile
+            fileobj.write(chunk)  # write data into partfile
+            fileobj.close()
+            print "write to part file complete: "+partFileName
             indexList.append(partFileName)
         inputfile.close()
 
@@ -70,7 +63,7 @@ def createUpload(srcfile): # create multipart upload
     uploadIDfile.close()
     return response["UploadId"]
 
-def uploadThread(uploadId, partnumber, partFileName, srcfile): # 单个Part上传开始
+def uploadThread(uploadId, partnumber, partFileName, srcfile, total): # 单个Part上传开始
     print "Start to upload partFile: "+str(partnumber)+"\n"
     with open(os.path.abspath(partFileName), 'rb') as data:
         retryTime = 0
@@ -99,16 +92,18 @@ def uploadThread(uploadId, partnumber, partFileName, srcfile): # 单个Part上�
             except Exception as e:
                 print "uploadThreadFunc Exception log: "+str(e)
                 sys.exit()
-    print "Uplaod part complete: " + str(partnumber)+" Etag: "+response["ETag"]
+    print "Uplaod part complete: " + str(partnumber)+"/"+str(total)+" Etag: "+response["ETag"]
+    return
 
 def uploadPart(uploadId, indexList, partnumberList, srcfile): # recursive upload parts
     partnumber = 1 # 当前循环要上传的Partnumber
+    total = len(indexList)
     # 线程池Start
     with futures.ThreadPoolExecutor(max_workers=MaxThread) as pool:
         for partFileName in indexList: 
             # start to upload part
             if partnumber not in partnumberList:
-                pool.submit(uploadThread, uploadId, partnumber, partFileName, srcfile)  # upload 1 part/thread
+                pool.submit(uploadThread, uploadId, partnumber, partFileName, srcfile, total)  # upload 1 part/thread
             else:
                 print "Part already exist: "+str(partnumber)
             partnumber += 1
