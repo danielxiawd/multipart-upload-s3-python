@@ -6,7 +6,7 @@
 # 传输中程序中断了，可以重新运行程序，会自动重传没传成功的Part
 # 运行前请配置本机访问AWS S3的KEYID和credential, AWS CLI: aws configure
 # 安装boto3 见https://github.com/boto/boto3
-# v0.91说明：该版本修改原来0.9Demo的机制，不拆物理分片，只做索引，不需要再占用临时目录的空间去存放分片
+# v0.91说明：该版本修改原来0.9Demo的机制，不拆物理分片，只做索引，不需要再占用临时目录的空间去存放分片 
 
 import sys
 import os

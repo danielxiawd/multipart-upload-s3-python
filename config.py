@@ -46,6 +46,6 @@ MaxRetry = 30
 MaxThread = 3
 
 # 是否跳过小于chunksize的小文件
-# 数字0为不跳过, 为1则跳过
+# 数字0为不跳过, 为1则跳过 
 # type = int
 IgnoreSmallFile = 0
