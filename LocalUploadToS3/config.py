@@ -21,6 +21,7 @@ Megabytes = 1024*1024
 chunksize = 10*Megabytes
 
 # 分拆文件的临时目录
+# 如果要重新上传，删除该目录下的ini文件即可
 # type = str
 # 例如 "/tmp"
 splitdir = "<目录路径>"

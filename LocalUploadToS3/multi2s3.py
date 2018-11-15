@@ -6,7 +6,7 @@
 # 传输中程序中断了，可以重新运行程序，会自动重传没传成功的Part
 # 运行前请配置本机访问AWS S3的KEYID和credential, AWS CLI: aws configure
 # 安装boto3 见https://github.com/boto/boto3
-# v0.91说明：该版本修改原来0.9Demo的机制，不拆物理分片，只做索引，不需要再占用临时目录的空间去存放分片 
+# v0.91说明：该版本修改原来0.9Demo的机制，不拆物理分片，只做索引，不需要再占用临时目录的空间去存放分片
 
 import sys
 import os
@@ -20,7 +20,7 @@ s3client = boto3.client('s3')
 
 # Split file into index parts
 def split(srcfile):
-    
+
     partnumber = 1
     fileSize = os.path.getsize(os.path.join(srcdir, srcfile))
     indexList = [0]
@@ -31,19 +31,19 @@ def split(srcfile):
 
 
 # Create multipart upload
-def createUpload(srcfile):  
+def createUpload(srcfile):
     response = s3client.create_multipart_upload(
         Bucket=s3bucket,
         Key=s3key+srcfile,
     )
     print ("Create_multipart_upload UploadId: ",response["UploadId"])
-    uploadIDFilename = os.path.join(splitdir, srcfile + '-uploadID.ini')  
+    uploadIDFilename = os.path.join(splitdir, srcfile + '-uploadID.ini')
     with open(uploadIDFilename, 'w') as uploadIDfile:
         uploadIDfile.write(response["UploadId"])
     return response["UploadId"]
 
 # Single Thread Upload one part
-def uploadThread(uploadId, partnumber, partStartIndex, srcfile, total): 
+def uploadThread(uploadId, partnumber, partStartIndex, srcfile, total):
     print ("Upload part: ",str(partnumber))
     with open(os.path.join(srcdir, srcfile), 'rb') as data:
         retryTime = 0
@@ -64,17 +64,17 @@ def uploadThread(uploadId, partnumber, partStartIndex, srcfile, total):
                 print ("uploadThreadFunc EndpointConnectionError log: "+str(e))
                 if retryTime > MaxRetry:
                     print ("Quit for Max retries: ",str(retryTime))
-                    sys.exit()
+                    os._exit(0)
                 time.sleep(5*retryTime)  # 递增延迟重试
             except ClientError as e:
                 print ("uploadThreadFunc ClientERR log: ",json.dumps(e.response, default=str))
-                sys.exit()
+                os._exit(0)
             except Exception as e:
                 print ("uploadThreadFunc Exception log: ",str(e))
-                sys.exit()
+                os._exit(0)
     print ("Uplaod part complete: ",str(partnumber)+"/"+str(total)," Etag: ",response["ETag"])
     return
-            
+
 
 # Recursive upload parts
 def uploadPart(uploadId, indexList, partnumberList, srcfile):
@@ -86,7 +86,7 @@ def uploadPart(uploadId, indexList, partnumberList, srcfile):
             # start to upload part
             if partnumber not in partnumberList:
                 # upload 1 part/thread
-                pool.submit(uploadThread, uploadId, partnumber,partStartIndex, srcfile, total) 
+                pool.submit(uploadThread, uploadId, partnumber,partStartIndex, srcfile, total)
             else:
                 print ("Part already exist: ",str(partnumber))
             partnumber += 1
@@ -96,7 +96,7 @@ def uploadPart(uploadId, indexList, partnumberList, srcfile):
 
 # Complete multipart upload
 # 通过查询回来的所有Part列表uploadedListParts来构建completeStructJSON
-def completeUpload(reponse_uploadId, uploadedListParts, srcfile):  
+def completeUpload(reponse_uploadId, uploadedListParts, srcfile):
     # 通过查询回来的所有Part列表uploadedListParts来构建completeStructJSON
     uploadedListPartsClean = []
     for partObject in uploadedListParts:
@@ -192,7 +192,7 @@ if __name__ == '__main__':
                 print ("Client log: ",str(e.response['Error']['Code']))
             except Exception as e:
                 print ("Exception err, quit because: "+str(e))
-                sys.exit()
+                os._exit(0)
 
         except IOError:  # 读不到uploadIDFile，即没启动过上传任务
             print ("First time to handle: ", srcfile)
@@ -215,7 +215,7 @@ if __name__ == '__main__':
             response_uploadedList["Parts"], len(response_indexList))
         if compareResult == "sizeNotMatch":
             print("Warning uploaded part sizeNotMatch ERR! Quit")
-            sys.exit()
+            os._exit(0)
 
         # 合并S3上的文件
         response_complete = completeUpload(
@@ -223,6 +223,3 @@ if __name__ == '__main__':
         print ("Finish: ",json.dumps(response_complete["Location"]))
 
     print ("Complete all files in folder: ",srcdir)
-
-
-
