@@ -143,27 +143,82 @@ def printPartList(uploadedListParts, indexListLenth):
 
 # Complete multipart upload
 # 通过查询回来的所有Part列表uploadedListParts来构建completeStructJSON
-def completeUpload(reponse_uploadId, uploadedListParts, srcfileKey):
-    # 通过查询回来的所有Part列表uploadedListParts来构建completeStructJSON
+def completeUpload(reponse_uploadId, srcfileKey, len_indexList):
+    # 查询S3的所有Part列表uploadedListParts构建completeStructJSON
     uploadedListPartsClean = []
-    for partObject in uploadedListParts:
-        ETag = partObject["ETag"]
-        PartNumber = partObject["PartNumber"]
-        addup = {
-            "ETag": ETag,
-            "PartNumber": PartNumber
-        }
-        uploadedListPartsClean.append(addup)
+    PartNumberMarker = 0
+    IsTruncated = True
+    while IsTruncated == True:
+        response_uploadedList = s3DESclient.list_parts(
+            Bucket=desBucket,
+            Key=srcfileKey,
+            UploadId=reponse_uploadId,
+            MaxParts=1000,
+            PartNumberMarker=PartNumberMarker
+        )
+        NextPartNumberMarker = response_uploadedList['NextPartNumberMarker']
+        IsTruncated = response_uploadedList['IsTruncated']
+        if NextPartNumberMarker > 0:
+            for partObject in response_uploadedList["Parts"]:
+                ETag = partObject["ETag"]
+                PartNumber = partObject["PartNumber"]
+                addup = {
+                    "ETag": ETag,
+                    "PartNumber": PartNumber
+                }
+                uploadedListPartsClean.append(addup)
+        PartNumberMarker = NextPartNumberMarker
+    if len(uploadedListPartsClean) != len_indexList:
+        print("Uploaded parts size not match")
+        os._exit(0)
     completeStructJSON = {"Parts": uploadedListPartsClean}
 
+    # S3合并multipart upload任务
     response = s3DESclient.complete_multipart_upload(
         Bucket=desBucket,
         Key=srcfileKey,
         UploadId=reponse_uploadId,
-        MultipartUpload=completeStructJSON  # 重新查询来构建completeStructJSON
+        MultipartUpload=completeStructJSON
     )
-    print ("Complete all upload and merged UploadId: ",reponse_uploadId)
+    print("Complete all upload and merged UploadId: ", reponse_uploadId)
     return response
+
+# 查询S3API 已上传的Partnumber
+def checkPartnumberList(srcfile, reponse_uploadId):
+    try:
+        partnumberList = [0]
+        PartNumberMarker = 0
+        IsTruncated = True
+        while IsTruncated == True:
+            response_uploadedList = s3DESclient.list_parts(
+                Bucket=desBucket,
+                Key=srcfile["Key"],
+                UploadId=reponse_uploadId,
+                MaxParts=1000,
+                PartNumberMarker=PartNumberMarker
+            )
+            NextPartNumberMarker = response_uploadedList['NextPartNumberMarker']
+            IsTruncated = response_uploadedList['IsTruncated']
+            if NextPartNumberMarker > 0:
+                for partnumberObject in response_uploadedList["Parts"]:
+                    partnumberList.append(partnumberObject["PartNumber"])
+            PartNumberMarker = NextPartNumberMarker
+        if partnumberList != [0]:  # 如果为0则表示没有查到已上传的Part
+            print("Got partnumber list: ", partnumberList)
+
+    except EndpointConnectionError as e:  # 无法连接S3
+        print("Can't connect to S3, check your network")
+        print("log: "+str(e))
+        sys.exit()
+    except ClientError as e:  # 查不到该UploadID表示该文件已经完成上传并清理
+        if e.response['Error']['Code'] == "NoSuchUpload":
+            print("This is a Finished Upload: ", srcfile)
+            return []  # 传递Nulll回去，表示跳下一循环处理下一个大文件
+        print("Client log: ", str(e.response['Error']['Code']))
+    except Exception as e:
+        print("Exception err, quit because: "+str(e))
+        os._exit(0)
+    return partnumberList
 
 # Main
 if __name__ == '__main__':
@@ -211,38 +266,16 @@ if __name__ == '__main__':
         uploadIDFilename = os.path.abspath(os.path.join(
             uploadIDdir, uploadIDFilename_sub + '.ini'))
         # 查看是否曾经建立了上传任务，加载uploadIDFile
-        partnumberList = [0]  # 分片Partnumber列表
         try:
+            partnumberList = [0]  # 分片Partnumber列表
             with open(uploadIDFilename, 'r') as uploadIDFile:
                 reponse_uploadId = uploadIDFile.read()
             print("Not the first time to handle: ", srcfile["Key"])
 
             # 有UploadID，则查询S3API 已上传的Partnumber
-            try:  # 查询S3API 已上传的Partnumber
-                response_uploadedList = s3DESclient.list_parts(
-                    Bucket=desBucket,
-                    Key=srcfile["Key"],
-                    UploadId=reponse_uploadId,
-                )
-                #获取已上传的Partnumber List
-                if response_uploadedList["NextPartNumberMarker"] > 0:
-                    for partnumberObject in response_uploadedList["Parts"]:
-                        partnumberList.append(partnumberObject["PartNumber"])
-                    print("Got PartnumberList: ", json.dumps(partnumberList))
-                else:
-                    print("No uploaded part")
-            except EndpointConnectionError as e:  # 无法连接S3
-                print("Can't connect to S3, check your network")
-                print("log: "+str(e))
-                os._exit(0)
-            except ClientError as e:  # 查不到该UploadID表示该文件已经完成上传并清理
-                if e.response['Error']['Code'] == "NoSuchUpload":
-                    print("This is a Finished Upload: ", srcfile["Key"])
-                    continue  # 下一循环处理下一个文件
-                print("Client log: ", str(e.response['Error']['Code']))
-            except Exception as e:
-                print("Exception err, quit because: "+str(e))
-                os._exit(0)
+            partnumberList = checkPartnumberList(srcfile, reponse_uploadId)
+            if partnumberList == []:
+                continue  # 下一循环处理下一个文件
 
         except IOError:  # 读不到uploadIDFile，即没启动过上传任务
             print("First time to handle: ", srcfile["Key"])
@@ -256,21 +289,9 @@ if __name__ == '__main__':
         response_uploadpart = uploadPart(reponse_uploadId, response_indexList, partnumberList, srcfile["Key"])
         print ("Last uploaded partnumber: ",response_uploadpart,"\n")
 
-        # 列出S3上全部已完成的Parts，并与本地比对
-        response_uploadedList = s3DESclient.list_parts(
-            Bucket=desBucket,
-            Key=srcfile["Key"],
-            UploadId=reponse_uploadId,
-        )
-        compareResult = printPartList(
-            response_uploadedList["Parts"], len(response_indexList))
-        if compareResult == "sizeNotMatch":
-            print("Warning uploaded part sizeNotMatch! Quit.")
-            os._exit(0)
-
         # 合并S3上的文件
         response_complete = completeUpload(
-            reponse_uploadId, response_uploadedList["Parts"], srcfile["Key"])
+            reponse_uploadId, srcfile["Key"], len(response_indexList))
         print("Finish: ", json.dumps(response_complete["Location"]))
 
     print("Copy mission accomplished, FROM (Region/Bucket/Prefix): ",
