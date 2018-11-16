@@ -27,6 +27,9 @@ def split(srcfile):
     while chunksize * partnumber < fileSize:
         indexList.append(chunksize * partnumber)
         partnumber += 1
+    if partnumber > 10000:
+        print("Max part number is 10000, but you have:", partnumber, ". Please change the chunksize in config file and try again.")
+        os._exit(0)
     return indexList
 
 
@@ -37,7 +40,7 @@ def createUpload(srcfile):
         Key=s3key+srcfile,
     )
     print ("Create_multipart_upload UploadId: ",response["UploadId"])
-    uploadIDFilename = os.path.join(splitdir, srcfile + '-uploadID.ini')
+    uploadIDFilename = os.path.abspath(os.path.join(splitdir, srcfile + '-uploadID.ini'))
     with open(uploadIDFilename, 'w') as uploadIDfile:
         uploadIDfile.write(response["UploadId"])
     return response["UploadId"]
@@ -159,7 +162,7 @@ if __name__ == '__main__':
     # 对文件列表srcfileList中的逐个文件进行操作
     for srcfile in srcfileList:
         # 上传文件的UploadID文件
-        uploadIDFilename = os.path.join(splitdir, srcfile + '-uploadID.ini')
+        uploadIDFilename = os.path.abspath(os.path.join(splitdir, srcfile + '-uploadID.ini'))
         # 查看是否曾经建立了上传任务，加载uploadIDFile
         partnumberList = [0]  # 分片Partnumber列表
         try:
