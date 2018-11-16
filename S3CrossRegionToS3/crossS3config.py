@@ -19,8 +19,8 @@ chunksize = 10*Megabytes
 
 # 存储上传UploadID的本地临时目录, type = str
 # 如果要重新上传，删除该目录下的ini文件即可
-# 例如 "/tmp"
-uploadIDdir = "<dir>"
+# 例如 "./UploadIDtmp"
+uploadIDdir = "./UploadIDtmp"
 
 # 目标文件存放Region, type = str
 desRegion = "us-west-2"

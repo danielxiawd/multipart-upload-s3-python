@@ -9,6 +9,7 @@ import sys
 import os
 import json
 import boto3
+import re
 from concurrent import futures
 from botocore.exceptions import ClientError, EndpointConnectionError
 import time
@@ -42,13 +43,12 @@ def split(srcfile):
     return indexList
 
 # Create multipart upload
-def createUpload(srcfile):
+def createUpload(srcfile, uploadIDFilename):
     response = s3DESclient.create_multipart_upload(
         Bucket=desBucket,
         Key=srcfile["Key"],
     )
     print ("Create_multipart_upload UploadId: ",response["UploadId"])
-    uploadIDFilename = os.path.join(uploadIDdir, srcfile["Key"] + '-uploadID.ini')
     with open(uploadIDFilename, 'w') as uploadIDfile:
         uploadIDfile.write(response["UploadId"])
     return response["UploadId"]
@@ -168,9 +168,8 @@ def completeUpload(reponse_uploadId, uploadedListParts, srcfileKey):
 # Main
 if __name__ == '__main__':
     # 索引文件的临时目录，检查不存在则新建
-    uploadIDdirPrefix = os.path.join(uploadIDdir, srcPrefix)
-    if not os.path.exists(uploadIDdirPrefix):
-        os.mkdir(uploadIDdirPrefix)
+    if not os.path.exists(uploadIDdir):
+        os.mkdir(uploadIDdir)
 
     # 检查目标S3能否写入
     s3DESclient.put_object(
@@ -178,7 +177,7 @@ if __name__ == '__main__':
         Key=srcPrefix+'access_test',
         Body='access_test_content'
     )
-    
+
     # 获取文件列表，含Key和文件Size
     fileList = []
     # 原文件名为*则查文件列表，否则就查单个文件
@@ -206,8 +205,11 @@ if __name__ == '__main__':
 
     # 对文件列表fileList中的逐个文件进行操作
     for srcfile in fileList:
-        # 上传文件的UploadID文件
-        uploadIDFilename = os.path.join(uploadIDdir, srcfile["Key"] + '-uploadID.ini')
+        # 保存上传UploadID的文件，把文件子目录"/"替换为"-"作为文件名
+        pattern = re.compile('/')
+        uploadIDFilename_sub = re.sub(pattern, '-', srcfile["Key"])
+        uploadIDFilename = os.path.abspath(os.path.join(
+            uploadIDdir, uploadIDFilename_sub + '.ini'))
         # 查看是否曾经建立了上传任务，加载uploadIDFile
         partnumberList = [0]  # 分片Partnumber列表
         try:
@@ -245,8 +247,8 @@ if __name__ == '__main__':
         except IOError:  # 读不到uploadIDFile，即没启动过上传任务
             print("First time to handle: ", srcfile["Key"])
             # 向S3创建Multipart Upload任务，获取UploadID
-            reponse_uploadId = createUpload(srcfile)
-        
+            reponse_uploadId = createUpload(srcfile, uploadIDFilename)
+
         # 获取索引列表
         response_indexList = split(srcfile)
 
@@ -273,4 +275,3 @@ if __name__ == '__main__':
 
     print("Copy mission accomplished, FROM (Region/Bucket/Prefix): ",
           srcRegion+"/"+srcBucket+"/"+srcPrefix, " TO ", desRegion+"/"+desBucket+"/"+srcPrefix)
-
