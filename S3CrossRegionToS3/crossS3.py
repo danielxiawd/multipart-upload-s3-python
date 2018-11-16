@@ -13,9 +13,9 @@ import re
 from concurrent import futures
 from botocore.exceptions import ClientError, EndpointConnectionError
 import time
-from crossS3config import srcRegion, srcBucket, srcPrefix, srcfileIndex, src_aws_access_key_id, src_aws_secret_access_key
-from crossS3config import chunksize, uploadIDdir, MaxRetry, MaxThread, IgnoreSmallFile
-from crossS3config import desRegion, desBucket, des_aws_access_key_id, des_aws_secret_access_key
+from crossS3config import srcRegion, srcBucket, srcPrefix, srcfileIndex, src_aws_access_key_id, \
+    src_aws_secret_access_key, chunksize, uploadIDdir, MaxRetry, MaxThread, IgnoreSmallFile, \
+    desRegion, desBucket, des_aws_access_key_id, des_aws_secret_access_key
 
 s3SRCclient = boto3.client(
     's3',
@@ -55,7 +55,7 @@ def createUpload(srcfile, uploadIDFilename):
 
 # Single Thread Upload one part
 def uploadThread(uploadId, partnumber, partStartIndex, srcfileKey, total):
-    print("Start get part: ", str(partnumber)+"/" +
+    print("Start getting part: ", str(partnumber)+"/" +
           str(total), "...")
     # 下载文件
     retryTime = 0
@@ -77,7 +77,7 @@ def uploadThread(uploadId, partnumber, partStartIndex, srcfileKey, total):
                 os._exit(0)
             time.sleep(5*retryTime)  # 递增延迟重试
 
-    print("Complete get part: ", str(partnumber)+"/" +
+    print("Complete download part: ", str(partnumber)+"/" +
           str(total), ", start to upload ...")
     # 上传文件
     retryTime = 0

@@ -16,6 +16,8 @@ src_aws_secret_access_key = "<key>" # 例如 "AAAAAAAAAAAAAAAAAAAAAAAA"
 Megabytes = 1024*1024
 # 文件分片大小，不小于5M，单文件分片总数不能超过10000, type = int
 chunksize = 10*Megabytes
+# 注意！！！
+# 如果某个文件传输到一半，要修改chunksize，请删除uploadIDdir目录下对应的ini文件，从头开始传
 
 # 存储上传UploadID的本地临时目录, type = str
 # 如果要重新上传，删除该目录下的ini文件即可

@@ -19,6 +19,8 @@ Megabytes = 1024*1024
 # 例如: 100*Megabytes
 # 对于上传几十GB的大文件，推荐分片大小为100*Megabytes
 chunksize = 10*Megabytes
+# 注意！！！
+# 如果某个文件传输到一半，要修改chunksize，请删除splitdir目录下对应的ini文件，从头开始传
 
 # 分拆文件的临时目录
 # 如果要重新上传，删除该目录下的ini文件即可
