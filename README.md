@@ -1,5 +1,5 @@
 ## AWS中国区与海外区S3文件互拷贝，多线程断点续传工具（适合批量的大文件）
-* 进入目录 S3CrossRegionToS3
+* 进入目录 S3CrossRegionToS3 (现已支持多级目录拷贝)
 
 ## 本地上传AWS S3，多线程断点续传工具（适合批量的大文件）
 * 进入目录 LocalUploadToS3

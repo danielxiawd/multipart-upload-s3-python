@@ -14,7 +14,7 @@ from concurrent import futures
 from botocore.exceptions import ClientError, EndpointConnectionError
 import time
 from crossS3config import srcRegion, srcBucket, srcPrefix, srcfileIndex, src_aws_access_key_id, \
-    src_aws_secret_access_key, chunksize, uploadIDdir, MaxRetry, MaxThread, IgnoreSmallFile, \
+    src_aws_secret_access_key, chunksize, MaxRetry, MaxThread, IgnoreSmallFile, \
     desRegion, desBucket, des_aws_access_key_id, des_aws_secret_access_key
 
 s3SRCclient = boto3.client(
@@ -37,26 +37,23 @@ def split(srcfile):
         indexList.append(chunksize * partnumber)
         partnumber += 1
     if partnumber > 10000:
-        print("Max part number is 10000, but you have:",
-              partnumber, ". Please change the chunksize in config file and try again.")
+        print(f'\nPART NUMBER LIMIT 10,000. YOUR FILE HAS {partnumber}. ')
+        print('PLEASE CHANGE THE chunksize IN CONFIG FILE AND TRY AGAIN')
         os._exit(0)
     return indexList
 
 # Create multipart upload
-def createUpload(srcfile, uploadIDFilename):
+def createUpload(srcfile):
     response = s3DESclient.create_multipart_upload(
         Bucket=desBucket,
-        Key=srcfile["Key"],
+        Key=srcfile["Key"]
     )
     print ("Create_multipart_upload UploadId: ",response["UploadId"])
-    with open(uploadIDFilename, 'w') as uploadIDfile:
-        uploadIDfile.write(response["UploadId"])
     return response["UploadId"]
 
 # Single Thread Upload one part
 def uploadThread(uploadId, partnumber, partStartIndex, srcfileKey, total):
-    print("Start getting part: ", str(partnumber)+"/" +
-          str(total), "...")
+    print("Downloading", str(partnumber)+"/" + str(total), "...")
     # 下载文件
     retryTime = 0
     while retryTime <= MaxRetry:
@@ -76,19 +73,17 @@ def uploadThread(uploadId, partnumber, partStartIndex, srcfileKey, total):
                 print("Quit for Max Download retries: ",str(retryTime))
                 os._exit(0)
             time.sleep(5*retryTime)  # 递增延迟重试
-
-    print("Complete download part: ", str(partnumber)+"/" +
-          str(total), ", start to upload ...")
+    print(f'               Uploading {partnumber}/{total} ...')
     # 上传文件
     retryTime = 0
     while retryTime <= MaxRetry:
         try:
-            response_upload = s3DESclient.upload_part(
+            s3DESclient.upload_part(
                 Body=getBody,
                 Bucket=desBucket,
                 Key=srcfileKey,
                 PartNumber=partnumber,
-                UploadId=uploadId,
+                UploadId=uploadId
             )
             break
         except Exception as e:
@@ -100,12 +95,11 @@ def uploadThread(uploadId, partnumber, partStartIndex, srcfileKey, total):
                 os._exit(0)
             time.sleep(5*retryTime)  # 递增延迟重试
 
-    print("Uplaod part complete: ", str(partnumber)+"/" +
-          str(total), " Etag: ", response_upload["ETag"])
-    return "Uploaded"
+    print(f'                                 Complete {partnumber}/{total}','%.2f%%'%(partnumber/total*100))
+    return
 
 # Recursive upload parts
-def uploadPart(uploadId, indexList, partnumberList, srcfileKey):
+def uploadPart(uploadId, indexList, partnumberList, srcfile):
     partnumber = 1  # 当前循环要上传的Partnumber
     total = len(indexList)
     # 线程池Start
@@ -114,32 +108,11 @@ def uploadPart(uploadId, indexList, partnumberList, srcfileKey):
             # start to upload part
             if partnumber not in partnumberList:
                 # upload 1 part/thread
-                pool.submit(uploadThread, uploadId, partnumber, partStartIndex, srcfileKey, total)
-            else:
-                print("Part already exist: ", str(partnumber))
+                pool.submit(uploadThread, uploadId, partnumber, partStartIndex, srcfile["Key"], total)
             partnumber += 1
     # 线程池End
-    print("All parts uploaded")
+    print(f'All parts uploaded, size: {srcfile["Size"]}')
     return str(partnumber-1)
-
-# Print and matching uploaded parts list
-# 打印列出已上传的Parts并与本地比对数量
-def printPartList(uploadedListParts, indexListLenth):
-    print("Uploaded parts included: ")
-    print("PartNumber       ETag                  LastModified               Size")
-    for partObject in uploadedListParts:
-        ETag = partObject["ETag"]
-        PartNumber = str(partObject["PartNumber"])
-        LastModified = str(partObject["LastModified"])
-        Size = str(partObject["Size"])
-        print(PartNumber, ETag, LastModified, Size)
-    uploadedListPartsLenth = len(uploadedListParts)
-    if uploadedListPartsLenth == indexListLenth:
-        print("Uploaded parts size match.", "\n")
-        return ("sizeMatch")
-    else:
-        print("Warning!!! Uploaded parts size not match as local parts files!", "\n")
-        return ("sizeNotMatch")
 
 # Complete multipart upload
 # 通过查询回来的所有Part列表uploadedListParts来构建completeStructJSON
@@ -180,13 +153,13 @@ def completeUpload(reponse_uploadId, srcfileKey, len_indexList):
         UploadId=reponse_uploadId,
         MultipartUpload=completeStructJSON
     )
-    print("Complete all upload and merged UploadId: ", reponse_uploadId)
+    print("Complete all upload and merged. UploadId: ", reponse_uploadId)
     return response
 
 # 查询S3API 已上传的Partnumber
 def checkPartnumberList(srcfile, reponse_uploadId):
     try:
-        partnumberList = [0]
+        partnumberList = []
         PartNumberMarker = 0
         IsTruncated = True
         while IsTruncated == True:
@@ -203,51 +176,46 @@ def checkPartnumberList(srcfile, reponse_uploadId):
                 for partnumberObject in response_uploadedList["Parts"]:
                     partnumberList.append(partnumberObject["PartNumber"])
             PartNumberMarker = NextPartNumberMarker
-        if partnumberList != [0]:  # 如果为0则表示没有查到已上传的Part
+        if partnumberList != []:  # 如果为0则表示没有查到已上传的Part
             print("Got partnumber list: ", partnumberList)
-
-    except EndpointConnectionError as e:  # 无法连接S3
-        print("Can't connect to S3, check your network")
-        print("log: "+str(e))
-        sys.exit()
-    except ClientError as e:  # 查不到该UploadID表示该文件已经完成上传并清理
-        if e.response['Error']['Code'] == "NoSuchUpload":
-            print("This is a Finished Upload: ", srcfile)
-            return []  # 传递Nulll回去，表示跳下一循环处理下一个大文件
-        print("Client log: ", str(e.response['Error']['Code']))
     except Exception as e:
-        print("Exception err, quit because: "+str(e))
+        print("Exception err, quit \n"+str(e))
         os._exit(0)
     return partnumberList
 
-# Main
-if __name__ == '__main__':
-    # 索引文件的临时目录，检查不存在则新建
-    if not os.path.exists(uploadIDdir):
-        os.mkdir(uploadIDdir)
-
-    # 检查目标S3能否写入
-    s3DESclient.put_object(
-        Bucket=desBucket,
-        Key=srcPrefix+'access_test',
-        Body='access_test_content'
-    )
-
-    # 获取文件列表，含Key和文件Size
+# 获取源文件列表，含Key和文件Size
+def getSRCFileList():
     fileList = []
     # 原文件名为*则查文件列表，否则就查单个文件
     if srcfileIndex == "*":
-        response_fileList = s3SRCclient.list_objects(
+        response_fileList = s3SRCclient.list_objects_v2(
             Bucket=srcBucket,
             Prefix=srcPrefix,
+            MaxKeys=1000
         )
         for n in response_fileList["Contents"]:
             # 检查文件大小，小于单个分片大小的从列表中去掉（如果IgnoreSmallFile开关打开）
             if (n["Size"] >= chunksize) or (IgnoreSmallFile == 0):
-                fileList.append({
-                    "Key": n["Key"],
-                    "Size": n["Size"]
-                })
+                if n["Key"][-1] != '/':      # Key以"/“结尾的是子目录，不处理
+                    fileList.append({
+                        "Key": n["Key"],
+                        "Size": n["Size"]
+                    })
+        while response_fileList["IsTruncated"]:
+            response_fileList = s3SRCclient.list_objects_v2(
+                Bucket=srcBucket,
+                Prefix=srcPrefix,
+                MaxKeys=1000,
+                ContinuationToken=response_fileList["NextContinuationToken"]
+            )
+            for n in response_fileList["Contents"]:
+                # 检查文件大小，小于单个分片大小的从列表中去掉（如果IgnoreSmallFile开关打开）
+                if (n["Size"] >= chunksize) or (IgnoreSmallFile == 0):
+                    if n["Key"][-1] != '/':      # Key以"/“结尾的是子目录，不处理
+                        fileList.append({
+                            "Key": n["Key"],
+                            "Size": n["Size"]
+                        })
     else:
         response_fileList = s3SRCclient.head_object(
             Bucket=srcBucket,
@@ -257,42 +225,141 @@ if __name__ == '__main__':
             "Key": srcPrefix+srcfileIndex,
             "Size": response_fileList["ContentLength"]
         }]
+    return fileList
+
+# 获取目标文件列表，含Key和文件Size
+def getDESFileList():
+    fileList = []
+    response_fileList = s3DESclient.list_objects_v2(
+        Bucket=desBucket,
+        Prefix=srcPrefix,
+        MaxKeys=1000
+    )
+    for n in response_fileList["Contents"]:
+        if n["Key"][-1] != '/':      # Key以"/“结尾的是子目录，不处理
+            fileList.append({
+                "Key": n["Key"],
+                "Size": n["Size"]
+            })
+    while response_fileList["IsTruncated"]:
+        response_fileList = s3DESclient.list_objects_v2(
+            Bucket=desBucket,
+            Prefix=srcPrefix,
+            MaxKeys=1000,
+            ContinuationToken=response_fileList["NextContinuationToken"]
+        )
+        for n in response_fileList["Contents"]:
+            if n["Key"][-1] != '/':      # Key以"/“结尾的是子目录，不处理
+                fileList.append({
+                    "Key": n["Key"],
+                    "Size": n["Size"]
+                })
+    return fileList
+
+# 查找Key是否存在，并且Size一致
+def checkFileExist(srcfile, desFilelist, UploadIdList):
+    # 检查源文件是否在目标文件夹中
+    for f in desFilelist:
+        if f["Key"] == srcfile["Key"] and \
+            (srcfile["Size"] == f["Size"]):  
+            return 'NEXT'  # 文件完全相同
+    # 找不到文件，或文件不一致，要重新传的
+    # 查Key是否有未完成的UploadID
+    keyIDList=[]
+    for u in UploadIdList:
+        if u["Key"] == srcfile["Key"]:
+            keyIDList.append(u)
+    # 如果找不到上传过的Upload，则从头开始传
+    if keyIDList == []:
+        return 'UPLOAD'
+    # 对同一个Key（文件）的不同Upload找出时间最晚的值
+    UploadID_latest = keyIDList[0]
+    for u in keyIDList:
+        if u["Initiated"] > UploadID_latest["Initiated"]:
+            UploadID_latest = u
+    return UploadID_latest["UploadId"]
+
+# 获取Bucket/Prefix中所有未完成的Multipart Upload
+def getUploadIdList():
+    NextKeyMarker=''
+    IsTruncated = True
+    UploadIdList=[]
+    while IsTruncated:
+        response = s3DESclient.list_multipart_uploads(
+            Bucket=desBucket,
+            Prefix=srcPrefix,
+            MaxUploads=1000,
+            KeyMarker=NextKeyMarker
+        )
+        IsTruncated = response["IsTruncated"]
+        NextKeyMarker = response["NextKeyMarker"]
+        if NextKeyMarker != '':
+            for n in response["Uploads"]:
+                UploadIdList.append({
+                    "Key": n["Key"],
+                    "Initiated": n["Initiated"],
+                    "UploadId": n["UploadId"]
+                })
+                print(f'Unfinished upload: Key: {n["Key"]}, Time: {n["Initiated"]}')
+    return UploadIdList
+
+# Main
+if __name__ == '__main__':
+    # 检查目标S3能否写入
+    s3DESclient.put_object(
+        Bucket=desBucket,
+        Key=srcPrefix+'access_test',
+        Body='access_test_content'
+    )
+    # 获取源文件列表和目标文件夹现存文件列表
+    fileList = getSRCFileList()
+    desFilelist = getDESFileList()
+    # 获取Bucket/Prefix中所有未完成的Multipart Upload
+    UploadIdList=getUploadIdList()
+
+    # 是否清理所有未完成的Multipart Upload, 用于强制重传
+    if UploadIdList != []:
+        print(f'There are {len(UploadIdList)} unfinished upload, do you want to clean them and restart?')
+        print('NOTICE: IF CLEAN, YOU CANNOT RESUME ANY UNFINISHED UPLOAD')
+        keyboard_input = input("CLEAN? Please confirm: (n/CLEAN)")
+        if keyboard_input == 'CLEAN':
+            # 清理所有未完成的Upload
+            for n in UploadIdList:
+                response = s3DESclient.abort_multipart_upload(
+                    Bucket=desBucket,
+                    Key=n["Key"],
+                    UploadId=n["UploadId"]
+                )
+            UploadIdList=[]
+            print('CLEAN FINISHED')
+        else:
+            print('Do not clean, keep the unfinished upload')
 
     # 对文件列表fileList中的逐个文件进行操作
     for srcfile in fileList:
-        # 保存上传UploadID的文件，把文件子目录"/"替换为"-"作为文件名
-        pattern = re.compile('/')
-        uploadIDFilename_sub = re.sub(pattern, '-', srcfile["Key"])
-        uploadIDFilename = os.path.abspath(os.path.join(
-            uploadIDdir, uploadIDFilename_sub + '.ini'))
-        # 查看是否曾经建立了上传任务，加载uploadIDFile
-        try:
-            partnumberList = [0]  # 分片Partnumber列表
-            with open(uploadIDFilename, 'r') as uploadIDFile:
-                reponse_uploadId = uploadIDFile.read()
-            print("Not the first time to handle: ", srcfile["Key"])
-
-            # 有UploadID，则查询S3API 已上传的Partnumber
+        print('')
+        # 检查文件是否已存在，存在不继续、不存在且没UploadID要新建、不存在但有UploadID得到返回的UploadID
+        response_check_upload=checkFileExist(srcfile, desFilelist, UploadIdList)
+        if response_check_upload == 'UPLOAD':
+            reponse_uploadId = createUpload(srcfile)
+            print(f'For new upload: {srcfile["Key"]}')
+            partnumberList=[]
+        elif response_check_upload == 'NEXT':
+            print(f'Duplicated. {srcfile["Key"]} already exist, and same size. Handle next file.')
+            continue
+        else:
+            reponse_uploadId=response_check_upload
+            # 获取已上传partnumberList
             partnumberList = checkPartnumberList(srcfile, reponse_uploadId)
-            if partnumberList == []:
-                continue  # 下一循环处理下一个文件
-
-        except IOError:  # 读不到uploadIDFile，即没启动过上传任务
-            print("First time to handle: ", srcfile["Key"])
-            # 向S3创建Multipart Upload任务，获取UploadID
-            reponse_uploadId = createUpload(srcfile, uploadIDFilename)
 
         # 获取索引列表
         response_indexList = split(srcfile)
 
         # 执行分片upload
-        response_uploadpart = uploadPart(reponse_uploadId, response_indexList, partnumberList, srcfile["Key"])
-        print ("Last uploaded partnumber: ",response_uploadpart,"\n")
+        response_uploadpart = uploadPart(reponse_uploadId, response_indexList, partnumberList, srcfile)
 
         # 合并S3上的文件
         response_complete = completeUpload(
             reponse_uploadId, srcfile["Key"], len(response_indexList))
-        print("Finish: ", json.dumps(response_complete["Location"]))
-
-    print("Copy mission accomplished, FROM (Region/Bucket/Prefix): ",
-          srcRegion+"/"+srcBucket+"/"+srcPrefix, " TO ", desRegion+"/"+desBucket+"/"+srcPrefix)
+        print(f'FINISH: {srcfile} UPLOADED TO {response_complete["Location"]}\n')
+    print(f'\nCOPY MISSION ACCOMPLISHED, FROM (REGION/BUCKET/PREFIX): {srcRegion}/{srcBucket}/{srcPrefix} TO {desRegion}/{desBucket}/{srcPrefix}')
