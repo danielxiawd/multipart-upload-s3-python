@@ -13,7 +13,7 @@ import re
 from concurrent import futures
 from botocore.exceptions import ClientError, EndpointConnectionError
 import time
-from crossS3config import srcRegion, srcBucket, srcPrefix, srcfileIndex, src_aws_access_key_id, \
+from S3toS3_config import srcRegion, srcBucket, srcPrefix, srcfileIndex, src_aws_access_key_id, \
     src_aws_secret_access_key, chunksize, MaxRetry, MaxThread, IgnoreSmallFile, \
     desRegion, desBucket, des_aws_access_key_id, des_aws_secret_access_key
 
@@ -88,13 +88,12 @@ def uploadThread(uploadId, partnumber, partStartIndex, srcfileKey, total):
             break
         except Exception as e:
             retryTime += 1
-            print("UploadThreadFunc Exception log: ", str(e))
+            print("UploadThreadFunc log:", str(e))
             print ("Upload part fail, retry part: ",str(partnumber),"Attempts: ",str(retryTime))
             if retryTime > MaxRetry:
                 print("Quit for Max Upload retries: ",str(retryTime))
                 os._exit(0)
             time.sleep(5*retryTime)  # 递增延迟重试
-
     print(f'                                 Complete {partnumber}/{total}','%.2f%%'%(partnumber/total*100))
     return
 
@@ -219,10 +218,10 @@ def getSRCFileList():
     else:
         response_fileList = s3SRCclient.head_object(
             Bucket=srcBucket,
-            Key=srcPrefix+srcfileIndex
+            Key=os.path.join(srcPrefix,srcfileIndex)
         )
         fileList = [{
-            "Key": srcPrefix+srcfileIndex,
+            "Key": os.path.join(srcPrefix,srcfileIndex),
             "Size": response_fileList["ContentLength"]
         }]
     return fileList
@@ -308,7 +307,7 @@ if __name__ == '__main__':
     # 检查目标S3能否写入
     s3DESclient.put_object(
         Bucket=desBucket,
-        Key=srcPrefix+'access_test',
+        Key=os.path.join(srcPrefix, 'access_test'),
         Body='access_test_content'
     )
     # 获取源文件列表和目标文件夹现存文件列表

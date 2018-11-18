@@ -20,17 +20,17 @@ by James Huang
 
 ## AWS 认证配置
 
-请在crossS3config.py文件中分别配置中国区和海外区的credential
+请在S3toS3_config.py文件中分别配置中国区和海外区的credential
 
 See the [Security Credentials](http://aws.amazon.com/security-credentials) page
 
 ## 应用配置
 
-修改配置 crossS3config.py
+修改配置 S3toS3_config.py
 
 ## 运行应用
 
 程序启动后会对源文件目录下的文件读取，并逐个进行分片和上传 Amazon's [Simple Storage Service (S3)](http://aws.amazon.com/s3),
 你需要在目的S3上有一个有写入权限的Bucket
 
-    python3 crossS3.py
+    python3 S3toS3.py

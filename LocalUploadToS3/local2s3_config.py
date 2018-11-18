@@ -12,31 +12,26 @@ srcdir = "<目录路径>"
 srcfileIndex = "*"
 
 Megabytes = 1024*1024
-
-# 文件分片大小，不小于5M
-# 注意S3限制单文件分片总数不能超过10000
-# type = int
-# 例如: 100*Megabytes
-# 对于上传几十GB的大文件，推荐分片大小为100*Megabytes
+# 文件分片大小，不小于5M，单文件分片总数不能超过10000, type = int
 chunksize = 10*Megabytes
-# 注意！！！
-# 如果某个文件传输到一半，要修改chunksize，请删除splitdir目录下对应的ini文件，从头开始传
+# 注意！！！如果某个文件传输到一半，要修改chunksize。请中断，然后
+# 在启动时选择Clean unfinished upload，程序会清除未完成文件，并重新上传整个文件
 
-# 分拆文件的临时目录
-# 如果要重新上传，删除该目录下的ini文件即可
-# type = str
-# 例如 "/tmp"
-splitdir = "<目录路径>"
+# 目标文件bucket, type = str
+# 例如 "mybucket2020"
+desBucket = "<yourbucket>"
 
-# S3 bucket
-# type = str
-# 例如: "mybucket2020"
-s3bucket = "<Bucket Name>"
+# 目标文件存放Region, type = str
+desRegion = "us-west-2"
 
 # S3 目录前缀 prefix (不含文件名)
 # type = str
 # 例如 "multipart/"
-s3key = "multipart/"
+srcPrefix = "multipart/"
+
+# 访问目标S3的access key id
+des_aws_access_key_id = "<id>"  # 例如 "AAAAAAAAAAAAAAAAAAAAAAAA"
+des_aws_secret_access_key = "<key>"  # 例如 "AAAAAAAAAAAAAAAAAAAAAAAA"
 
 # 单个Part上传失败最大重试次数
 # type = int
