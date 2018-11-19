@@ -332,7 +332,7 @@ if __name__ == '__main__':
             UploadIdList=[]
             print('CLEAN FINISHED')
         else:
-            print('Do not clean, keep the unfinished upload')
+            print('Do not clean, try to resume unfinished upload')
 
     # 对文件列表fileList中的逐个文件进行操作
     for srcfile in fileList:
@@ -362,3 +362,23 @@ if __name__ == '__main__':
             reponse_uploadId, srcfile["Key"], len(response_indexList))
         print(f'FINISH: {srcfile} UPLOADED TO {response_complete["Location"]}\n')
     print(f'\nCOPY MISSION ACCOMPLISHED, FROM (REGION/BUCKET/PREFIX): {srcRegion}/{srcBucket}/{srcPrefix} TO {desRegion}/{desBucket}/{srcPrefix}')
+
+    # 再次获取源文件列表和目标文件夹现存文件列表进行比较，输出比较结果
+    print('Comparing destination and source ...')
+    fileList = getSRCFileList()
+    desFilelist = getDESFileList()
+    deltaList = []
+    for source_file in fileList:
+        match = False
+        for destination_file in desFilelist:
+            if source_file == destination_file:
+                match = True # source 在 destination找到，并且Size一致
+                break
+        if not match:
+            deltaList.append(source_file)
+    if deltaList==[]:
+        print(f'All source files are in destination Bucket/Prefix')
+    else:
+        print(f'There are {len(deltaList)} files not in destination or not the same size, list:')
+        for delta_file in deltaList:
+            print(delta_file)

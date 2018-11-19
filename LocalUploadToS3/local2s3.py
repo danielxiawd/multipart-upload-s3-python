@@ -238,16 +238,8 @@ def checkFileExist(srcfile, desFilelist, UploadIdList):
             UploadID_latest = u
     return UploadID_latest["UploadId"]
 
-# Main
-if __name__ == '__main__':
-    # 检查目标S3能否写入
-    s3DESclient.put_object(
-        Bucket=desBucket,
-        Key=os.path.join(srcPrefix, 'access_test'),
-        Body='access_test_content'
-    )
-
-    # 获取源文件目录中所有等待上传文件的列表 srcfileList
+# 获取源文件目录中所有等待上传文件的列表 srcfileList
+def getSRCFileList():
     srcfileList = []
     if srcfileIndex == "*":
         for parent, dirnames, filenames in os.walk(srcdir):
@@ -262,6 +254,19 @@ if __name__ == '__main__':
                     })
     else:
         srcfileList = [srcfileIndex]
+    return srcfileList
+
+# Main
+if __name__ == '__main__':
+    # 检查目标S3能否写入
+    s3DESclient.put_object(
+        Bucket=desBucket,
+        Key=os.path.join(srcPrefix, 'access_test'),
+        Body='access_test_content'
+    )
+
+    # 获取源文件目录中所有等待上传文件的列表 srcfileList
+    srcfileList = getSRCFileList()
     # 获取目标文件夹现存文件列表
     desFilelist = getDESFileList()
     # 获取Bucket/Prefix中所有未完成的Multipart Upload
@@ -312,3 +317,24 @@ if __name__ == '__main__':
             reponse_uploadId, srcfile["Key"], len(response_indexList))
         print(f'FINISH: {srcfile} UPLOADED TO {response_complete["Location"]}\n')
     print(f'Complete all files in folder: {srcdir} TO {desBucket}/{srcPrefix}')
+
+    # 再次获取源文件列表和目标文件夹现存文件列表进行比较，输出比较结果
+    print('Comparing destination and source ...')
+    fileList = getSRCFileList()
+    desFilelist = getDESFileList()
+    deltaList = []
+    for source_file in fileList:
+        match = False
+        for destination_file in desFilelist:
+            if (os.path.join(srcPrefix, source_file["Key"]) == destination_file["Key"]) and \
+                (source_file["Size"] == destination_file["Size"]):
+                match = True  # source 在 destination找到，并且Size一致
+                break
+        if not match:
+            deltaList.append(source_file)
+    if deltaList==[]:
+        print(f'All source files are in destination Bucket/Prefix')
+    else:
+        print(f'There are {len(deltaList)} files not in destination or not the same size, list:')
+        for delta_file in deltaList:
+            print(delta_file)
