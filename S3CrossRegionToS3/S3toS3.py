@@ -2,14 +2,12 @@
 # Python 3.6
 # Composed by Huang Zhuobin
 # Cross copy object between China region AWS S3 and Global region AWS S3
-# 对S3上的大文件进行分拆分片Part，上传到另一区域的S3上，例如源文件在AWS北京区S3，目标为AWS俄勒冈区域S3
-# 多线程操作。传输中程序中断了，可以重新运行程序，会自动重传没传成功的分片
+# install boto3 refer to https://github.com/boto/boto3
 
 import sys
 import os
 import json
 import boto3
-import re
 from concurrent import futures
 from botocore.exceptions import ClientError, EndpointConnectionError
 import time
@@ -186,26 +184,12 @@ def checkPartnumberList(srcfile, reponse_uploadId):
 def getSRCFileList():
     fileList = []
     # 原文件名为*则查文件列表，否则就查单个文件
-    if srcfileIndex == "*":
-        response_fileList = s3SRCclient.list_objects_v2(
-            Bucket=srcBucket,
-            Prefix=srcPrefix,
-            MaxKeys=1000
-        )
-        for n in response_fileList["Contents"]:
-            # 检查文件大小，小于单个分片大小的从列表中去掉（如果IgnoreSmallFile开关打开）
-            if (n["Size"] >= chunksize) or (IgnoreSmallFile == 0):
-                if n["Key"][-1] != '/':      # Key以"/“结尾的是子目录，不处理
-                    fileList.append({
-                        "Key": n["Key"],
-                        "Size": n["Size"]
-                    })
-        while response_fileList["IsTruncated"]:
+    try:
+        if srcfileIndex == "*":
             response_fileList = s3SRCclient.list_objects_v2(
                 Bucket=srcBucket,
                 Prefix=srcPrefix,
-                MaxKeys=1000,
-                ContinuationToken=response_fileList["NextContinuationToken"]
+                MaxKeys=1000
             )
             for n in response_fileList["Contents"]:
                 # 检查文件大小，小于单个分片大小的从列表中去掉（如果IgnoreSmallFile开关打开）
@@ -215,15 +199,33 @@ def getSRCFileList():
                             "Key": n["Key"],
                             "Size": n["Size"]
                         })
-    else:
-        response_fileList = s3SRCclient.head_object(
-            Bucket=srcBucket,
-            Key=os.path.join(srcPrefix,srcfileIndex)
-        )
-        fileList = [{
-            "Key": os.path.join(srcPrefix,srcfileIndex),
-            "Size": response_fileList["ContentLength"]
-        }]
+            while response_fileList["IsTruncated"]:
+                response_fileList = s3SRCclient.list_objects_v2(
+                    Bucket=srcBucket,
+                    Prefix=srcPrefix,
+                    MaxKeys=1000,
+                    ContinuationToken=response_fileList["NextContinuationToken"]
+                )
+                for n in response_fileList["Contents"]:
+                    # 检查文件大小，小于单个分片大小的从列表中去掉（如果IgnoreSmallFile开关打开）
+                    if (n["Size"] >= chunksize) or (IgnoreSmallFile == 0):
+                        if n["Key"][-1] != '/':      # Key以"/“结尾的是子目录，不处理
+                            fileList.append({
+                                "Key": n["Key"],
+                                "Size": n["Size"]
+                            })
+        else:
+            response_fileList = s3SRCclient.head_object(
+                Bucket=srcBucket,
+                Key=os.path.join(srcPrefix,srcfileIndex)
+            )
+            fileList = [{
+                "Key": os.path.join(srcPrefix,srcfileIndex),
+                "Size": response_fileList["ContentLength"]
+            }]
+    except Exception as e:
+        print('Can not get source bucket/prefix. Err: ',e)
+        os._exit(0)
     return fileList
 
 # 获取目标文件列表，含Key和文件Size
@@ -305,11 +307,16 @@ def getUploadIdList():
 # Main
 if __name__ == '__main__':
     # 检查目标S3能否写入
-    s3DESclient.put_object(
-        Bucket=desBucket,
-        Key=os.path.join(srcPrefix, 'access_test'),
-        Body='access_test_content'
-    )
+    try:
+        s3DESclient.put_object(
+            Bucket=desBucket,
+            Key=os.path.join(srcPrefix, 'access_test'),
+            Body='access_test_content'
+        )
+    except Exception as e:
+        print('Not authorized to write to destination bucket/prefix. Err: ', e)
+        os._exit(0)
+
     # 获取源文件列表和目标文件夹现存文件列表
     fileList = getSRCFileList()
     desFilelist = getDESFileList()

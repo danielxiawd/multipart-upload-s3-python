@@ -2,19 +2,16 @@
 # Python 3.6
 # Composed by Huang Zhuobin
 # This demo split file into multiparts and use s3 multipart upload to S3 with retry
-# 该Demo对大文件进行分拆，多线程进行Multipart上传S3，单个分片传输失败会多次重试，重试次数自定义
-# 传输中程序中断了，可以重新运行程序，会自动重传没传成功的Part
-# 运行前请配置本机访问AWS S3的KEYID和credential, AWS CLI: aws configure
-# 安装boto3 见https://github.com/boto/boto3
-# v0.91说明：该版本修改原来0.9Demo的机制，不拆物理分片，只做索引，不需要再占用临时目录的空间去存放分片
+# install boto3 refer to https://github.com/boto/boto3
 
 import sys
 import os
 import json
 import boto3
 from concurrent import futures
-from local2s3_config import srcdir, srcfileIndex, chunksize, desBucket, srcPrefix, MaxRetry, MaxThread, IgnoreSmallFile, desRegion, des_aws_access_key_id, des_aws_secret_access_key
-from botocore.exceptions import ClientError, EndpointConnectionError
+from local2s3_config import srcdir, srcfileIndex, chunksize, desBucket, \
+    srcPrefix, MaxRetry, MaxThread, IgnoreSmallFile, desRegion, \
+    des_aws_access_key_id, des_aws_secret_access_key
 import time
 s3DESclient = boto3.client(
     's3',
@@ -241,30 +238,44 @@ def checkFileExist(srcfile, desFilelist, UploadIdList):
 # 获取源文件目录中所有等待上传文件的列表 srcfileList
 def getSRCFileList():
     srcfileList = []
-    if srcfileIndex == "*":
-        for parent, dirnames, filenames in os.walk(srcdir):
-            for filename in filenames:  # 遍历输出文件信息
-                file_absPath = os.path.join(parent, filename)
-                file_relativePath = file_absPath[len(srcdir)+1:]
-                file_size = os.path.getsize(file_absPath)
-                if (file_size >= chunksize) or (IgnoreSmallFile == 0):
-                    srcfileList.append({
-                        "Key": file_relativePath,
-                        "Size": file_size
-                    })
-    else:
-        srcfileList = [srcfileIndex]
+    try:
+        if srcfileIndex == "*":
+            for parent, dirnames, filenames in os.walk(srcdir):
+                for filename in filenames:  # 遍历输出文件信息
+                    file_absPath = os.path.join(parent, filename)
+                    file_relativePath = file_absPath[len(srcdir)+1:]
+                    file_size = os.path.getsize(file_absPath)
+                    if (file_size >= chunksize) or (IgnoreSmallFile == 0):
+                        srcfileList.append({
+                            "Key": file_relativePath,
+                            "Size": file_size
+                        })
+        else:
+            file_size = os.path.getsize(os.path.join(srcdir, srcfileIndex))
+            srcfileList = [{
+                "Key": srcfileIndex,
+                "Size": file_size
+            }]
+    except Exception as e:
+        print('Can not get source files. Err: ', e)
+        os._exit(0)
+    if srcfileList ==[]:
+        print('Can not get source files. Err: ', e)
+        os._exit(0)
     return srcfileList
 
 # Main
 if __name__ == '__main__':
     # 检查目标S3能否写入
-    s3DESclient.put_object(
-        Bucket=desBucket,
-        Key=os.path.join(srcPrefix, 'access_test'),
-        Body='access_test_content'
-    )
-
+    try:
+        s3DESclient.put_object(
+            Bucket=desBucket,
+            Key=os.path.join(srcPrefix, 'access_test'),
+            Body='access_test_content'
+        )
+    except Exception as e:
+        print('Not authorized to write to destination bucket/prefix. Err: ', e)
+        os._exit(0)
     # 获取源文件目录中所有等待上传文件的列表 srcfileList
     srcfileList = getSRCFileList()
     # 获取目标文件夹现存文件列表
