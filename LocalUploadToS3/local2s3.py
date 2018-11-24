@@ -68,7 +68,7 @@ def uploadThread(uploadId, partnumber, partStartIndex, srcfileKey, total):
                     print ("Quit for Max retries: ",str(retryTime))
                     os._exit(0)
                 time.sleep(5*retryTime)  # 递增延迟重试
-    print(f'               Complete {partnumber}/{total}','% .2f % %'% (partnumber/total*100))
+    print(f'               Complete {partnumber}/{total}','%.2f%%'%(partnumber/total*100))
     return
 
 # Recursive upload parts
@@ -314,6 +314,7 @@ if __name__ == '__main__':
             print(f'Duplicated. {srcfile["Key"]} already exist, and same size. Handle next file.')
             continue
         else:
+            print(f'Resume upload: {srcfile["Key"]}')
             reponse_uploadId=response_check_upload
             # 获取已上传partnumberList
             partnumberList = checkPartnumberList(srcfile, reponse_uploadId)
