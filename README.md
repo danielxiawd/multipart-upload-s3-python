@@ -1,10 +1,12 @@
-## AWS中国区与海外区S3文件互拷贝，多线程断点续传工具（适合批量的大文件）
+## AWS中国区与海外区S3文件互拷贝
+多线程断点续传工具（适合批量的大文件）
 ## S3 copy between AWS China Regions and Global Regions
 Breakpoint resume supported, suitable for large files
 * 进入目录 S3CrossRegionToS3
 
 
-## 本地上传AWS S3，多线程断点续传工具（适合批量的大文件）
+## 本地上传AWS S3
+多线程断点续传工具（适合批量的大文件）
 ## Local file upload to AWS S3
 Breakpoint resume supported, suitable for large files
 * 进入目录 LocalUploadToS3
