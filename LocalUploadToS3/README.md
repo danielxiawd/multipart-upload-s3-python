@@ -27,6 +27,7 @@ Create a file named "credentials" at ~/.aws/ (`C:\Users\USER_NAME\.aws\` for Win
     [default]
     aws_access_key_id = <your access key id>
     aws_secret_access_key = <your secret key>
+
 Create a file named "config" at ~/.aws/ (`C:\Users\USER_NAME\.aws\` for Windows users) and saving the following lines in the file:
 
     [default]
@@ -34,11 +35,13 @@ Create a file named "config" at ~/.aws/ (`C:\Users\USER_NAME\.aws\` for Windows 
     output=text
 
 上面 "default" 配置的是 profle name，你可以用其他的 profile 名称例如：
+
 在 credentials 文件中：
 
     [beijing]
     aws_access_key_id=XXXXXXXXXXXXXXX
     aws_secret_access_key=XXXXXXXXXXXXXXXXXXXXXX
+    
 在 config 文件中：
 
     [profile beijing]
