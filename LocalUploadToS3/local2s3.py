@@ -9,15 +9,10 @@ import os
 import json
 import boto3
 from concurrent import futures
-from local2s3_config import srcdir, srcfileIndex, chunksize, desBucket, \
-    srcPrefix, MaxRetry, MaxThread, IgnoreSmallFile, desRegion, \
-    des_aws_access_key_id, des_aws_secret_access_key
+from local2s3_config import *
 import time
-s3DESclient = boto3.client(
-    's3',
-    aws_access_key_id=des_aws_access_key_id,
-    aws_secret_access_key=des_aws_secret_access_key,
-    region_name=desRegion)
+DESsession = boto3.session.Session(profile_name=aws_profile_name)
+s3DESclient = DESsession.client('s3')
 if srcdir[-1]=='/':
     srcdir = srcdir[:len(srcdir)-1]
 
@@ -68,7 +63,7 @@ def uploadThread(uploadId, partnumber, partStartIndex, srcfileKey, total):
                     print ("Quit for Max retries: ",str(retryTime))
                     os._exit(0)
                 time.sleep(5*retryTime)  # 递增延迟重试
-    print(f'               Complete {partnumber}/{total}','%.2f%%'%(partnumber/total*100))
+    print(f'               Complete {partnumber}/{total} {partnumber/total:.2%}')
     return
 
 # Recursive upload parts
@@ -260,7 +255,7 @@ def getSRCFileList():
         print('Can not get source files. Err: ', e)
         os._exit(0)
     if srcfileList ==[]:
-        print('Can not get source files. Err: ', e)
+        print('Can not get source files. Err')
         os._exit(0)
     return srcfileList
 

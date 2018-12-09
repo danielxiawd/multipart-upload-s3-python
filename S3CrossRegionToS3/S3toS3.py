@@ -11,21 +11,12 @@ import boto3
 from concurrent import futures
 from botocore.exceptions import ClientError, EndpointConnectionError
 import time
-from S3toS3_config import srcRegion, srcBucket, srcPrefix, srcfileIndex, src_aws_access_key_id, \
-    src_aws_secret_access_key, chunksize, MaxRetry, MaxThread, IgnoreSmallFile, \
-    desRegion, desBucket, des_aws_access_key_id, des_aws_secret_access_key
+from S3toS3_config import *
 
-s3SRCclient = boto3.client(
-    's3',
-    aws_access_key_id=src_aws_access_key_id,
-    aws_secret_access_key=src_aws_secret_access_key,
-    region_name=srcRegion)
-
-s3DESclient = boto3.client(
-    's3',
-    aws_access_key_id=des_aws_access_key_id,
-    aws_secret_access_key=des_aws_secret_access_key,
-    region_name=desRegion)
+SRCsession = boto3.session.Session(profile_name=src_aws_profile_name)
+s3SRCclient = SRCsession.client('s3')
+DESsession = boto3.session.Session(profile_name=des_aws_profile_name)
+s3DESclient = DESsession.client('s3')
 
 # Split file into index parts
 def split(srcfile):
@@ -92,7 +83,7 @@ def uploadThread(uploadId, partnumber, partStartIndex, srcfileKey, total):
                 print("Quit for Max Upload retries: ",str(retryTime))
                 os._exit(0)
             time.sleep(5*retryTime)  # 递增延迟重试
-    print(f'                                 Complete {partnumber}/{total}','%.2f%%'%(partnumber/total*100))
+    print(f'                                 Complete {partnumber}/{total} {partnumber/total:.2%}')
     return
 
 # Recursive upload parts
@@ -150,7 +141,7 @@ def completeUpload(reponse_uploadId, srcfileKey, len_indexList):
         UploadId=reponse_uploadId,
         MultipartUpload=completeStructJSON
     )
-    print("Complete all upload and merged. UploadId: ", reponse_uploadId)
+    #print("Complete all upload and merged. UploadId: ", reponse_uploadId)
     return response
 
 # 查询S3API 已上传的Partnumber
@@ -368,7 +359,7 @@ if __name__ == '__main__':
         response_complete = completeUpload(
             reponse_uploadId, srcfile["Key"], len(response_indexList))
         print(f'FINISH: {srcfile} UPLOADED TO {response_complete["Location"]}\n')
-    print(f'\nCOPY MISSION ACCOMPLISHED, FROM (REGION/BUCKET/PREFIX): {srcRegion}/{srcBucket}/{srcPrefix} TO {desRegion}/{desBucket}/{srcPrefix}')
+    print(f'\nCOPY MISSION ACCOMPLISHED, FROM (BUCKET/PREFIX): {srcBucket}/{srcPrefix} TO {desBucket}/{srcPrefix}')
 
     # 再次获取源文件列表和目标文件夹现存文件列表进行比较，输出比较结果
     print('Comparing destination and source ...')

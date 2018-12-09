@@ -21,17 +21,13 @@ chunksize = 10*Megabytes
 # 例如 "mybucket2020"
 desBucket = "<yourbucket>"
 
-# 目标文件存放Region, type = str
-desRegion = "us-west-2"
-
 # S3 目录前缀 prefix (不含文件名)
 # type = str
 # 例如 "multipart/"
 srcPrefix = "multipart/"
 
-# 访问目标S3的access key id
-des_aws_access_key_id = "<id>"  # 例如 "AAAAAAAAAAAAAAAAAAAAAAAA"
-des_aws_secret_access_key = "<key>"  # 例如 "AAAAAAAAAAAAAAAAAAAAAAAA"
+# 在~/.aws 中配置的 profile name，定义了访问S3的 credentials
+aws_profile_name = "default"  
 
 # 单个Part上传失败最大重试次数
 # type = int

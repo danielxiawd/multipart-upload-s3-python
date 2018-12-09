@@ -9,10 +9,11 @@
 * 如果某个文件传输到一半，要修改chunksize。请中断，然后在启动时选择Clean unfinished upload，程序会清除未完成文件，并重新上传整个文件
 * 注意chunksize的大小设置。S3的Multi_part_upload最大只支持1万个分片
 
-Version 0.93
+Version 0.93b
 * 支持多级目录复制；
 * 不再依赖本地UploadId的ini文件比对，而是跟目标文件夹比对，有相同文件名和Size则跳过不传；有未完成的Multi_part_upload，则取时间最后的一个就行自动续传
 * 查询文件列表、分片列表均可突破原来版本1000的限制。S3单次查询列表最大返回1000，现在做了续查。 
+* 调用本地~/.aws 配置的 credentials，无需额外配置认证信息
 Version 0.92 
 * 该版本修改原来0.9Demo的机制，不拆物理分片，只做索引，不需要再占用临时目录的空间去存放分片。
 
@@ -20,14 +21,32 @@ Version 0.92
 by James Huang
 
 ## AWS 认证配置
+ 
+Create a file named "credentials" at ~/.aws/ (`C:\Users\USER_NAME\.aws\` for Windows users) and saving the following lines in the file:
+    [default]
+    aws_access_key_id = <your access key id>
+    aws_secret_access_key = <your secret key>
+Create a file named "config" at ~/.aws/ (`C:\Users\USER_NAME\.aws\` for Windows users) and saving the following lines in the file:
+    [default]
+    region = <your region>
+    output=text
 
-请在local2S3_config.py文件中配置S3的credential
+上面 "default" 配置的是 profle name，你可以用其他的 profile 名称例如：
+在 credentials 文件中：
+    [beijing]
+    aws_access_key_id=XXXXXXXXXXXXXXX
+    aws_secret_access_key=XXXXXXXXXXXXXXXXXXXXXX
+在 config 文件中：
+    [profile beijing]
+    region=cn-north-1
+    output=text
 
-See the [Security Credentials](http://aws.amazon.com/security-credentials) page
+See the [Security Credentials](http://aws.amazon.com/security-credentials) page for more detail
 
 ## 应用配置
 
 修改配置 local2s3_config.py
+上面配置的 profile name 填入对应的
 
 ## 运行应用
 
