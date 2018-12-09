@@ -45,6 +45,7 @@ Create a file named "config" at ~/.aws/ (`C:\Users\USER_NAME\.aws\` for Windows 
     aws_secret_access_key=XXXXXXXXXXXXXXXXXXXXXX
 
 在 config 文件中：
+
     [profile beijing]
     region=cn-north-1
     output=text
