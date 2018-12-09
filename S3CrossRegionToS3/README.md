@@ -22,10 +22,12 @@ by James Huang
 ## AWS 认证配置
 
 Create a file named "credentials" at ~/.aws/ (`C:\Users\USER_NAME\.aws\` for Windows users) and saving the following lines in the file:
+
     [default]
     aws_access_key_id = <your access key id>
     aws_secret_access_key = <your secret key>
 Create a file named "config" at ~/.aws/ (`C:\Users\USER_NAME\.aws\` for Windows users) and saving the following lines in the file:
+
     [default]
     region = <your region>
     output=text
@@ -33,6 +35,7 @@ Create a file named "config" at ~/.aws/ (`C:\Users\USER_NAME\.aws\` for Windows 
 上面 "default" 配置的是 profle name，在本工具中，你需要配置两个 profile ，一个是访问源 S3，一个是访问目的 S3。示例：
 
 在 credentials 文件中：
+
     [beijing]
     aws_access_key_id=XXXXXXXXXXXXXXX
     aws_secret_access_key=XXXXXXXXXXXXXXXXXXXXXX
