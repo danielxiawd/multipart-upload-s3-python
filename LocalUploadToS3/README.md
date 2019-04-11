@@ -9,6 +9,9 @@
 * 如果某个文件传输到一半，要修改chunksize。请中断，然后在启动时选择Clean unfinished upload，程序会清除未完成文件，并重新上传整个文件
 * 注意chunksize的大小设置。S3的Multi_part_upload最大只支持1万个分片
 
+Version 0.93c
+* 支持设置目的存储的级别 StorageClass
+
 Version 0.93b
 * 支持多级目录复制；
 * 不再依赖本地UploadId的ini文件比对，而是跟目标文件夹比对，有相同文件名和Size则跳过不传；有未完成的Multi_part_upload，则取时间最后的一个就行自动续传
