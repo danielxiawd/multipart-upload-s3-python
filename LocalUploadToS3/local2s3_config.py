@@ -43,3 +43,7 @@ MaxThread = 3
 # 数字0为不跳过, 为1则跳过 
 # type = int
 IgnoreSmallFile = 0
+
+# 存储级别
+StorageClass = 'STANDARD'
+# 'STANDARD'|'REDUCED_REDUNDANCY'|'STANDARD_IA'|'ONEZONE_IA'|'INTELLIGENT_TIERING'|'GLACIER'|'DEEP_ARCHIVE'

@@ -35,7 +35,8 @@ def split(srcfile):
 def createUpload(srcfile):
     response = s3DESclient.create_multipart_upload(
         Bucket=desBucket,
-        Key=srcfile["Key"]
+        Key=srcfile["Key"],
+        StorageClass=StorageClass
     )
     print ("Create_multipart_upload UploadId: ",response["UploadId"])
     return response["UploadId"]

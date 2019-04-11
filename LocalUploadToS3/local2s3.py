@@ -35,6 +35,7 @@ def createUpload(srcfile):
     response = s3DESclient.create_multipart_upload(
         Bucket=desBucket,
         Key=os.path.join(srcPrefix, srcfile["Key"]),
+        StorageClass=StorageClass
     )
     print ("Create_multipart_upload UploadId: ",response["UploadId"])
     return response["UploadId"]
