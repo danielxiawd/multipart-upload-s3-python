@@ -11,6 +11,7 @@ import boto3
 from concurrent import futures
 from local2s3_config import *
 import time
+import hashlib
 DESsession = boto3.session.Session(profile_name=aws_profile_name)
 s3DESclient = DESsession.client('s3')
 if srcdir[-1]=='/':
@@ -41,15 +42,17 @@ def createUpload(srcfile):
     return response["UploadId"]
 
 # Single Thread Upload one part
-def uploadThread(uploadId, partnumber, partStartIndex, srcfileKey, total):
+def uploadThread(uploadId, partnumber, partStartIndex, srcfileKey, total, md5list):
     print(f'Uploading {partnumber}/{total} ...')
     with open(os.path.join(srcdir, srcfileKey), 'rb') as data:
         retryTime = 0
         while retryTime <= MaxRetry:
             try:
                 data.seek(partStartIndex)
+                chunkdata=data.read(chunksize)
+                md5list[partnumber-1] = hashlib.md5(chunkdata)
                 s3DESclient.upload_part(
-                    Body=data.read(chunksize),
+                    Body=chunkdata,
                     Bucket=desBucket,
                     Key=os.path.join(srcPrefix, srcfileKey),
                     PartNumber=partnumber,
@@ -65,23 +68,30 @@ def uploadThread(uploadId, partnumber, partStartIndex, srcfileKey, total):
                     os._exit(0)
                 time.sleep(5*retryTime)  # 递增延迟重试
     print(f'               Complete {partnumber}/{total} {partnumber/total:.2%}')
-    return
+    return 
 
 # Recursive upload parts
 def uploadPart(uploadId, indexList, partnumberList, srcfile):
     partnumber = 1  # 当前循环要上传的Partnumber
     total = len(indexList)
+    md5list = [hashlib.md5(b'')]*total
     # 线程池Start
     with futures.ThreadPoolExecutor(max_workers=MaxThread) as pool:
         for partStartIndex in indexList:
             # start to upload part
             if partnumber not in partnumberList:
                 # upload 1 part/thread
-                pool.submit(uploadThread, uploadId, partnumber, partStartIndex, srcfile["Key"], total)
+                pool.submit(uploadThread, uploadId, partnumber, partStartIndex, srcfile["Key"], total, md5list)
             partnumber += 1
     # 线程池End
     print(f'All parts uploaded, size: {srcfile["Size"]}')
-    return str(partnumber-1)
+
+    # 计算所有分片列表的总etag: cal_etag
+    digests = b"".join(m.digest() for m in md5list)
+    md5full = hashlib.md5(digests)
+    cal_etag = '"%s-%s"' % (md5full.hexdigest(), len(md5list))
+    
+    return cal_etag
 
 # Complete multipart upload
 # 通过查询回来的所有Part列表uploadedListParts来构建completeStructJSON
@@ -208,7 +218,7 @@ def getUploadIdList():
                 print(f'Unfinished upload: Key: {n["Key"]}, Time: {n["Initiated"]}')
     return UploadIdList
 
-# 查找Key是否存在，并且Size一致
+# 查找Key是否存在，并且Size一致，一致则认为是同一文件
 def checkFileExist(srcfile, desFilelist, UploadIdList):
     # 检查源文件是否在目标文件夹中
     for f in desFilelist:
@@ -260,6 +270,10 @@ def getSRCFileList():
         os._exit(0)
     return srcfileList
 
+
+class NextFile(Exception):
+    pass
+
 # Main
 if __name__ == '__main__':
     # 检查目标S3能否写入
@@ -300,30 +314,52 @@ if __name__ == '__main__':
     # 对文件列表srcfileList中的逐个文件进行操作
     for srcfile in srcfileList:
         print('')
-        # 检查文件是否已存在，存在不继续、不存在且没UploadID要新建、不存在但有UploadID得到返回的UploadID
-        response_check_upload=checkFileExist(srcfile, desFilelist, UploadIdList)
-        if response_check_upload == 'UPLOAD':
-            reponse_uploadId = createUpload(srcfile)
-            print(f'For new upload: {srcfile["Key"]}')
-            partnumberList=[]
-        elif response_check_upload == 'NEXT':
-            print(f'Duplicated. {srcfile["Key"]} already exist, and same size. Handle next file.')
-            continue
-        else:
-            print(f'Resume upload: {srcfile["Key"]}')
-            reponse_uploadId=response_check_upload
-            # 获取已上传partnumberList
-            partnumberList = checkPartnumberList(srcfile, reponse_uploadId)
 
-        # 获取索引列表
-        response_indexList = split(srcfile)
-        # 执行分片upload
-        response_uploadpart = uploadPart(reponse_uploadId, response_indexList, partnumberList, srcfile)
+        try: 
+            # 循环重试3次（如果MD5计算的ETag不一致）
+            for md5_retry in range(0, 3):
 
-        # 合并S3上的文件
-        response_complete = completeUpload(
-            reponse_uploadId, srcfile["Key"], len(response_indexList))
-        print(f'FINISH: {srcfile} UPLOADED TO {response_complete["Location"]}\n')
+                # 检查文件是否已存在，存在不继续、不存在且没UploadID要新建、不存在但有UploadID得到返回的UploadID
+                response_check_upload=checkFileExist(srcfile, desFilelist, UploadIdList)
+                if response_check_upload == 'UPLOAD':
+                    reponse_uploadId = createUpload(srcfile)
+                    print(f'For new upload: {srcfile["Key"]}')
+                    partnumberList=[]
+                elif response_check_upload == 'NEXT':
+                    print(f'Duplicated. {srcfile["Key"]} already exist, and same size. Handle next file.')
+                    raise NextFile()
+                else:
+                    print(f'Resume upload: {srcfile["Key"]}')
+                    reponse_uploadId=response_check_upload
+                    # 获取已上传partnumberList
+                    partnumberList = checkPartnumberList(srcfile, reponse_uploadId)
+
+                # 获取索引列表
+                response_indexList = split(srcfile)
+                # 执行分片upload
+                upload_etag_full = uploadPart(
+                    reponse_uploadId, response_indexList, partnumberList, srcfile)
+
+                # 合并S3上的文件
+                response_complete = completeUpload(
+                    reponse_uploadId, srcfile["Key"], len(response_indexList))
+                print(f'FINISH: {srcfile} UPLOADED TO {response_complete["Location"]}')
+
+                # 检查文件MD5
+                if response_complete["ETag"] == upload_etag_full:
+                    print('MD5 ETag Matched: ', response_complete["ETag"], '\n')
+                    break
+                else:  # ETag 不匹配，删除S3的文件，重试
+                    print('MD5 ETag NOT MATCHED ( Destination / Origin ): ',
+                          response_complete["ETag"], '/', upload_etag_full, '  Retry!!!\n')
+                    s3DESclient.delete_object(
+                        Bucket=desBucket,
+                        Key=srcfile["Key"]
+                    )
+                if md5_retry == 2:
+                    print('MD5 ETag NOT MATCHED Exceed Max Retries!\n')
+        except NextFile:
+            pass
     print(f'Complete all files in folder: {srcdir} TO {desBucket}/{srcPrefix}')
 
     # 再次获取源文件列表和目标文件夹现存文件列表进行比较，输出比较结果

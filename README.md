@@ -1,5 +1,5 @@
 # AWS S3 多线程断点续传工具
-适合批量的大文件，支持多级目录拷贝
+适合批量的大文件，支持多级目录拷贝，每个文件上传完都进行MD5校验
 MulitiTread S3 upload tools, Breakpoint resume supported, suitable for large files
 
 ## AWS 中国区与海外区 S3 文件互拷贝 (S3 copy between AWS China Regions and Global Regions)
