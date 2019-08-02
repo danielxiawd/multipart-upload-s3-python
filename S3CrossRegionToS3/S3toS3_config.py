@@ -39,3 +39,5 @@ IgnoreSmallFile = 0
 # 存储级别
 StorageClass = 'STANDARD'
 # 'STANDARD'|'REDUCED_REDUNDANCY'|'STANDARD_IA'|'ONEZONE_IA'|'INTELLIGENT_TIERING'|'GLACIER'|'DEEP_ARCHIVE'
+
+ifVerifyMD5 = False  # 已经上传过的分片，是否下载原分片校验MD5

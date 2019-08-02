@@ -27,7 +27,7 @@ def split(srcfile):
         indexList.append(chunksize * partnumber)
         partnumber += 1
     if partnumber > 10000:
-        print(f'\nPART NUMBER LIMIT 10,000. YOUR FILE HAS {partnumber}. ')
+        print(f'\n[ERROR] PART NUMBER LIMIT 10,000. YOUR FILE HAS {partnumber}. ')
         print('PLEASE CHANGE THE chunksize IN CONFIG FILE AND TRY AGAIN')
         os._exit(0)
     return indexList
@@ -39,54 +39,62 @@ def createUpload(srcfile):
         Key=srcfile["Key"],
         StorageClass=StorageClass
     )
-    print ("Create_multipart_upload UploadId: ",response["UploadId"])
+    print ("[INFO] Create_multipart_upload UploadId: ",response["UploadId"])
     return response["UploadId"]
 
 # Single Thread Upload one part
-def uploadThread(uploadId, partnumber, partStartIndex, srcfileKey, total, md5list):
-    print("Downloading", str(partnumber)+"/" + str(total), "...")
-    # 下载文件
-    retryTime = 0
-    while retryTime <= MaxRetry:
-        try:
-            response_get_object = s3SRCclient.get_object(
-                Bucket=srcBucket,
-                Key=srcfileKey,
-                Range="bytes="+str(partStartIndex)+"-"+str(partStartIndex+chunksize-1)
+
+
+def uploadThread(uploadId, partnumber, partStartIndex, srcfileKey, total, md5list, dryrun):
+    if ifVerifyMD5 == True or (ifVerifyMD5 == False and dryrun == False):
+        # 下载文件
+        if dryrun == False:
+            print("Downloading", str(partnumber)+"/" + str(total), "...")
+        else:
+            print("Downloading for verify MD5", str(partnumber)+"/" + str(total), "...")
+        retryTime = 0
+        while retryTime <= MaxRetry:
+            try:
+                response_get_object = s3SRCclient.get_object(
+                    Bucket=srcBucket,
+                    Key=srcfileKey,
+                    Range="bytes="+str(partStartIndex)+"-"+str(partStartIndex+chunksize-1)
+                    )
+                getBody = response_get_object["Body"].read()
+                md5list[partnumber-1] = hashlib.md5(getBody)
+                break
+            except Exception as e:
+                retryTime += 1
+                print("[WARNING] DownloadThreadFunc Exception log: ", str(e))
+                print ("[WARNING] Download part fail, retry part: ",str(partnumber),"Attempts: ",str(retryTime))
+                if retryTime > MaxRetry:
+                    print("[ERROR] Quit for Max Download retries: ",str(retryTime))
+                    os._exit(0)
+                time.sleep(5*retryTime)  # 递增延迟重试
+    if dryrun == False:
+        # 上传文件
+        print(f'               Uploading {partnumber}/{total} ...')
+        retryTime = 0
+        while retryTime <= MaxRetry:
+            try:
+                s3DESclient.upload_part(
+                    Body=getBody,
+                    Bucket=desBucket,
+                    Key=srcfileKey,
+                    PartNumber=partnumber,
+                    UploadId=uploadId
                 )
-            getBody = response_get_object["Body"].read()
-            md5list[partnumber-1] = hashlib.md5(getBody)
-            break
-        except Exception as e:
-            retryTime += 1
-            print("DownloadThreadFunc Exception log: ", str(e))
-            print ("Download part fail, retry part: ",str(partnumber),"Attempts: ",str(retryTime))
-            if retryTime > MaxRetry:
-                print("Quit for Max Download retries: ",str(retryTime))
-                os._exit(0)
-            time.sleep(5*retryTime)  # 递增延迟重试
-    print(f'               Uploading {partnumber}/{total} ...')
-    # 上传文件
-    retryTime = 0
-    while retryTime <= MaxRetry:
-        try:
-            s3DESclient.upload_part(
-                Body=getBody,
-                Bucket=desBucket,
-                Key=srcfileKey,
-                PartNumber=partnumber,
-                UploadId=uploadId
-            )
-            break
-        except Exception as e:
-            retryTime += 1
-            print("UploadThreadFunc log:", str(e))
-            print ("Upload part fail, retry part: ",str(partnumber),"Attempts: ",str(retryTime))
-            if retryTime > MaxRetry:
-                print("Quit for Max Upload retries: ",str(retryTime))
-                os._exit(0)
-            time.sleep(5*retryTime)  # 递增延迟重试
-    print(f'                                 Complete {partnumber}/{total} {partnumber/total:.2%}')
+                break
+            except Exception as e:
+                retryTime += 1
+                print("[WARNING] UploadThreadFunc log:", str(e))
+                print ("[WARNING] Upload part fail, retry part: ",str(partnumber),"Attempts: ",str(retryTime))
+                if retryTime > MaxRetry:
+                    print("[ERROR] Quit for Max Upload retries: ",str(retryTime))
+                    os._exit(0)
+                time.sleep(5*retryTime)  # 递增延迟重试
+    if dryrun == False:
+        print(f'                                 Complete {partnumber}/{total} {partnumber/total:.2%}')
     return
 
 # Recursive upload parts
@@ -99,12 +107,15 @@ def uploadPart(uploadId, indexList, partnumberList, srcfile):
         for partStartIndex in indexList:
             # start to upload part
             if partnumber not in partnumberList:
-                # upload 1 part/thread
-                pool.submit(uploadThread, uploadId, partnumber,
-                            partStartIndex, srcfile["Key"], total, md5list)
+                dryrun = False
+            else:
+                dryrun = True
+            # upload 1 part/thread
+            pool.submit(uploadThread, uploadId, partnumber,
+                        partStartIndex, srcfile["Key"], total, md5list, dryrun)
             partnumber += 1
     # 线程池End
-    print(f'All parts uploaded, size: {srcfile["Size"]}')
+    print(f'[INFO] All parts uploaded, size: {srcfile["Size"]}')
 
     # 计算所有分片列表的总etag: cal_etag
     digests = b"".join(m.digest() for m in md5list)
@@ -141,7 +152,7 @@ def completeUpload(reponse_uploadId, srcfileKey, len_indexList):
                 uploadedListPartsClean.append(addup)
         PartNumberMarker = NextPartNumberMarker
     if len(uploadedListPartsClean) != len_indexList:
-        print("Uploaded parts size not match")
+        print("[WARNING] Uploaded parts size not match")
         os._exit(0)
     completeStructJSON = {"Parts": uploadedListPartsClean}
 
@@ -176,9 +187,9 @@ def checkPartnumberList(srcfile, reponse_uploadId):
                     partnumberList.append(partnumberObject["PartNumber"])
             PartNumberMarker = NextPartNumberMarker
         if partnumberList != []:  # 如果为0则表示没有查到已上传的Part
-            print("Got partnumber list: ", partnumberList)
+            print("[INFO] Got partnumber list: ", partnumberList)
     except Exception as e:
-        print("Exception err, quit \n"+str(e))
+        print("[ERROR] Exception err, quit \n"+str(e))
         os._exit(0)
     return partnumberList
 
@@ -226,7 +237,7 @@ def getSRCFileList():
                 "Size": response_fileList["ContentLength"]
             }]
     except Exception as e:
-        print('Can not get source bucket/prefix. Err: ',e)
+        print('[ERROR] Can not get source bucket/prefix. Err: ',e)
         os._exit(0)
     return fileList
 
@@ -303,7 +314,7 @@ def getUploadIdList():
                     "Initiated": n["Initiated"],
                     "UploadId": n["UploadId"]
                 })
-                print(f'Unfinished upload: Key: {n["Key"]}, Time: {n["Initiated"]}')
+                print(f'[INFO] Unfinished upload: Key: {n["Key"]}, Time: {n["Initiated"]}')
     return UploadIdList
 
 
@@ -320,7 +331,7 @@ if __name__ == '__main__':
             Body='access_test_content'
         )
     except Exception as e:
-        print('Not authorized to write to destination bucket/prefix. Err: ', e)
+        print('[ERROR] Not authorized to write to destination bucket/prefix. Err: ', e)
         os._exit(0)
 
     # 获取源文件列表和目标文件夹现存文件列表
@@ -331,7 +342,7 @@ if __name__ == '__main__':
 
     # 是否清理所有未完成的Multipart Upload, 用于强制重传
     if UploadIdList != []:
-        print(f'There are {len(UploadIdList)} unfinished upload, do you want to clean them and restart?')
+        print(f'[WARNING] There are {len(UploadIdList)} unfinished upload, do you want to clean them and restart?')
         print('NOTICE: IF CLEAN, YOU CANNOT RESUME ANY UNFINISHED UPLOAD')
         keyboard_input = input("CLEAN? Please confirm: (n/CLEAN)")
         if keyboard_input == 'CLEAN':
@@ -343,9 +354,9 @@ if __name__ == '__main__':
                     UploadId=n["UploadId"]
                 )
             UploadIdList=[]
-            print('CLEAN FINISHED')
+            print('[INFO] CLEAN FINISHED')
         else:
-            print('Do not clean, try to resume unfinished upload')
+            print('[INFO] Do not clean, try to resume unfinished upload')
 
     # 对文件列表fileList中的逐个文件进行操作
     for srcfile in fileList:
@@ -359,10 +370,11 @@ if __name__ == '__main__':
                 response_check_upload=checkFileExist(srcfile, desFilelist, UploadIdList)
                 if response_check_upload == 'UPLOAD':
                     reponse_uploadId = createUpload(srcfile)
-                    print(f'For new upload: {srcfile["Key"]}')
+                    print(f'[INFO] For new upload: {srcfile["Key"]}')
                     partnumberList=[]
                 elif response_check_upload == 'NEXT':
-                    print(f'Duplicated. {srcfile["Key"]} already exist, and same size. Handle next file.')
+                    print(
+                        f'[INFO] Duplicated. {srcfile["Key"]} already exist, and same size. Handle next file.')
                     raise NextFile()
                 else:
                     reponse_uploadId=response_check_upload
@@ -379,28 +391,32 @@ if __name__ == '__main__':
                 # 合并S3上的文件
                 response_complete = completeUpload(
                     reponse_uploadId, srcfile["Key"], len(response_indexList))
-                print(f'FINISH: {srcfile} UPLOADED TO {response_complete["Location"]}')
+                print(
+                    f'[INFO] FINISH: {srcfile} UPLOADED TO {response_complete["Location"]}')
 
                 # 检查文件MD5
                 if response_complete["ETag"] == upload_etag_full:
-                    print('MD5 ETag Matched: ',
+                    print('[INFO] MD5 ETag Matched: ',
                           response_complete["ETag"], '\n')
                     break
                 else:  # ETag 不匹配，删除S3的文件，重试
-                    print('MD5 ETag NOT MATCHED ( Destination / Origin ): ',
-                          response_complete["ETag"], '/', upload_etag_full, '  Retry!!!\n')
+                    print('[WARNING] MD5 ETag NOT MATCHED ( Destination / Origin ): ',
+                          response_complete["ETag"], '/', upload_etag_full)
                     s3DESclient.delete_object(
                         Bucket=desBucket,
                         Key=srcfile["Key"]
                     )
+                    UploadIdList = []
+                    print('[WARNING] Deleted and retry upload...')
                 if md5_retry == 2:
-                    print('MD5 ETag NOT MATCHED Exceed Max Retries!\n')
+                    print('[ERROR] MD5 ETag NOT MATCHED Exceed Max Retries!\n')
         except NextFile:
             pass
-    print(f'\nCOPY MISSION ACCOMPLISHED, FROM (BUCKET/PREFIX): {srcBucket}/{srcPrefix} TO {desBucket}/{srcPrefix}')
+    print(
+        f'\n[INFO] COPY MISSION ACCOMPLISHED, FROM (BUCKET/PREFIX): {srcBucket}/{srcPrefix} TO {desBucket}/{srcPrefix}')
 
     # 再次获取源文件列表和目标文件夹现存文件列表进行比较，输出比较结果
-    print('Comparing destination and source ...')
+    print('[INFO] Comparing destination and source ...')
     fileList = getSRCFileList()
     desFilelist = getDESFileList()
     deltaList = []
@@ -413,8 +429,8 @@ if __name__ == '__main__':
         if not match:
             deltaList.append(source_file)
     if deltaList==[]:
-        print(f'All source files are in destination Bucket/Prefix')
+        print(f'[INFO] All source files are in destination Bucket/Prefix')
     else:
-        print(f'There are {len(deltaList)} files not in destination or not the same size, list:')
+        print(f'[WARNING] There are {len(deltaList)} files not in destination or not the same size, list:')
         for delta_file in deltaList:
             print(delta_file)
