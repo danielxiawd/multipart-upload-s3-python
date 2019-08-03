@@ -45,7 +45,7 @@ def createUpload(srcfile):
 # Single Thread Upload one part
 
 
-def uploadThread(uploadId, partnumber, partStartIndex, srcfileKey, total, md5list, dryrun):
+def uploadThread(uploadId, partnumber, partStartIndex, srcfileKey, total, md5list, dryrun, complete_list):
     if ifVerifyMD5 == True or (ifVerifyMD5 == False and dryrun == False):
         # 下载文件
         if dryrun == False:
@@ -93,8 +93,10 @@ def uploadThread(uploadId, partnumber, partStartIndex, srcfileKey, total, md5lis
                     print("[ERROR] Quit for Max Upload retries: ",str(retryTime))
                     os._exit(0)
                 time.sleep(5*retryTime)  # 递增延迟重试
+    complete_list.append(partnumber)
     if dryrun == False:
-        print(f'                                 Complete {partnumber}/{total} {partnumber/total:.2%}')
+        print(
+            f'                                 Complete {partnumber}/{total} {len(complete_list)/total:.2%}')
     return
 
 # Recursive upload parts
@@ -102,6 +104,7 @@ def uploadPart(uploadId, indexList, partnumberList, srcfile):
     partnumber = 1  # 当前循环要上传的Partnumber
     total = len(indexList)
     md5list = [hashlib.md5(b'')]*total
+    complete_list = []
     # 线程池Start
     with futures.ThreadPoolExecutor(max_workers=MaxThread) as pool:
         for partStartIndex in indexList:
@@ -112,7 +115,7 @@ def uploadPart(uploadId, indexList, partnumberList, srcfile):
                 dryrun = True
             # upload 1 part/thread
             pool.submit(uploadThread, uploadId, partnumber,
-                        partStartIndex, srcfile["Key"], total, md5list, dryrun)
+                        partStartIndex, srcfile["Key"], total, md5list, dryrun, complete_list)
             partnumber += 1
     # 线程池End
     print(f'[INFO] All parts uploaded, size: {srcfile["Size"]}')
@@ -395,21 +398,24 @@ if __name__ == '__main__':
                     f'[INFO] FINISH: {srcfile} UPLOADED TO {response_complete["Location"]}')
 
                 # 检查文件MD5
-                if response_complete["ETag"] == upload_etag_full:
-                    print('[INFO] MD5 ETag Matched: ',
-                          response_complete["ETag"], '\n')
+                if ifVerifyMD5 == True:
+                    if response_complete["ETag"] == upload_etag_full:
+                        print('[INFO] MD5 ETag Matched: ',
+                            response_complete["ETag"], '\n')
+                        break
+                    else:  # ETag 不匹配，删除S3的文件，重试
+                        print('[WARNING] MD5 ETag NOT MATCHED ( Destination / Origin ): ',
+                            response_complete["ETag"], '/', upload_etag_full)
+                        s3DESclient.delete_object(
+                            Bucket=desBucket,
+                            Key=srcfile["Key"]
+                        )
+                        UploadIdList = []
+                        print('[WARNING] Deleted and retry upload...')
+                    if md5_retry == 2:
+                        print('[ERROR] MD5 ETag NOT MATCHED Exceed Max Retries!\n')
+                else:
                     break
-                else:  # ETag 不匹配，删除S3的文件，重试
-                    print('[WARNING] MD5 ETag NOT MATCHED ( Destination / Origin ): ',
-                          response_complete["ETag"], '/', upload_etag_full)
-                    s3DESclient.delete_object(
-                        Bucket=desBucket,
-                        Key=srcfile["Key"]
-                    )
-                    UploadIdList = []
-                    print('[WARNING] Deleted and retry upload...')
-                if md5_retry == 2:
-                    print('[ERROR] MD5 ETag NOT MATCHED Exceed Max Retries!\n')
         except NextFile:
             pass
     print(

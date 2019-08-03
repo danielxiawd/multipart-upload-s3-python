@@ -43,7 +43,7 @@ def createUpload(srcfile):
     return response["UploadId"]
 
 # Single Thread Upload one part
-def uploadThread(uploadId, partnumber, partStartIndex, srcfileKey, total, md5list, dryrun):
+def uploadThread(uploadId, partnumber, partStartIndex, srcfileKey, total, md5list, dryrun, complete_list):
     if dryrun == False:
         print(f'Uploading {partnumber}/{total} ...')
     with open(os.path.join(srcdir, srcfileKey), 'rb') as data:
@@ -70,8 +70,10 @@ def uploadThread(uploadId, partnumber, partStartIndex, srcfileKey, total, md5lis
                     print ("[ERROR] Quit for Max retries: ",str(retryTime))
                     os._exit(0)
                 time.sleep(5*retryTime)  # 递增延迟重试
+    complete_list.append(partnumber)
     if dryrun == False:
-        print(f'               Complete {partnumber}/{total} {partnumber/total:.2%}')
+        print(
+            f'               Complete {partnumber}/{total} {len(complete_list)/total:.2%}')
     return 
 
 # Recursive upload parts
@@ -79,6 +81,7 @@ def uploadPart(uploadId, indexList, partnumberList, srcfile):
     partnumber = 1  # 当前循环要上传的Partnumber
     total = len(indexList)
     md5list = [hashlib.md5(b'')]*total
+    complete_list = []
     # 线程池Start
     with futures.ThreadPoolExecutor(max_workers=MaxThread) as pool:
         for partStartIndex in indexList:
@@ -88,7 +91,8 @@ def uploadPart(uploadId, indexList, partnumberList, srcfile):
             else:
                 dryrun = True
             # upload 1 part/thread
-            pool.submit(uploadThread, uploadId, partnumber, partStartIndex, srcfile["Key"], total, md5list, dryrun)
+            pool.submit(uploadThread, uploadId, partnumber, 
+                        partStartIndex, srcfile["Key"], total, md5list, dryrun, complete_list)
             partnumber += 1
     # 线程池End
     print(f'[INFO] All parts uploaded, size: {srcfile["Size"]}')
