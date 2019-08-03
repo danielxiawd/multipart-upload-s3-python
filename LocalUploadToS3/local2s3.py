@@ -64,7 +64,7 @@ def uploadThread(uploadId, partnumber, partStartIndex, srcfileKey, total, md5lis
                 break
             except Exception as e:
                 retryTime += 1
-                print ("[INFO] uploadThreadFunc log:",str(e))
+                print("[WARNING] uploadThreadFunc log:", str(e))
                 print ("[WARNING] Upload part fail, retry part:",str(partnumber),"Attempts: ",str(retryTime))
                 if retryTime > MaxRetry:
                     print ("[ERROR] Quit for Max retries: ",str(retryTime))
