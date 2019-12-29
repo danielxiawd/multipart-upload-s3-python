@@ -10,8 +10,9 @@ MulitiTread S3 upload tools, Breakpoint resume supported, suitable for large fil
 * 可以指定单一文件拷贝，也可以目录下的全部文件拷贝，自动遍历下级子目录
 * 可设置跳过太小的文件（小于单个分片的大小）
 * 程序中断，重启启动程序后，程序会查询S3上已完成的分片来进行核对。自动重传未完成的分片
+--------  
+* 注意 chunksize 的大小设置。S3 的 Multi_part_upload 最大只支持1万个分片。例如 chunksize 5MB 最大只能支持单个文件 50GB，如果要传单个文件 500GB，则需要设置 chunksize 50MB 。
 * 注意 如果某个文件传输到一半，你要修改chunksize的话。请中断，然后在启动时选择Clean unfinished upload，程序会清除未完成文件，并重新上传整个文件  
-* 注意 chunksize 的大小设置。S3的Multi_part_upload最大只支持1万个分片
 
 开发语言：Python 3.7   
 by James Huang  
