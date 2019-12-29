@@ -5,14 +5,14 @@ MulitiTread S3 upload tools, Breakpoint resume supported, suitable for large fil
 从本地硬盘上传，或海外与中国区 AWS S3 存储之间互相拷贝，例如单个文件1G或500G。支持多级目录拷贝，具体功能包括：  
 * 本地或S3源文件的自动分片获取，并上传到目的S3，自动断点续传(分片级别)
 * 多文件并发传输，且每个文件再多线程并发传输
-* 每个分片以及每个文件上传完都进行MD5校验
+* 每个分片上传完都进行MD5校验，以及每个文件上传完进行分片合并时再进行一次MD5校验
 * 网络超时自动多次重传，次数可设置。重试采用递增延迟，延迟间隔递增=次数*5秒
 * 可以指定单一文件拷贝，也可以目录下的全部文件拷贝，自动遍历下级子目录
-* 可设置跳过太小的文件（小于单个分片的大小）
+* 可选设置跳过太小的文件（小于单个分片的大小）
 * 程序中断，重启启动程序后，程序会查询S3上已完成的分片来进行核对。自动重传未完成的分片
 --------  
-* 注意 chunksize 的大小设置。S3 的 Multi_part_upload 最大只支持1万个分片。例如 chunksize 5MB 最大只能支持单个文件 50GB，如果要传单个文件 500GB，则需要设置 chunksize 50MB 。
-* 注意 如果某个文件传输到一半，你要修改chunksize的话。请中断，然后在启动时选择Clean unfinished upload，程序会清除未完成文件，并重新上传整个文件  
+* 注意 ChunkSize 的大小设置。AWS S3 的 Multi_part_upload API 最大只支持10,000个分片。例如设置 ChunkSize 5MB 最大只能支持单个文件 50GB，如果要传单个文件 500GB，则需要设置 ChunkSize 50MB。
+* 注意 如果某个文件传输到一半，你要修改 ChunkSize 的话。请中断，然后在启动时选择CLEAN unfinished upload，程序会清除未完成文件，并重新上传整个文件，否则文件断点会不正确。  
 
 开发语言：Python 3.7   
 by James Huang  
