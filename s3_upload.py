@@ -564,11 +564,11 @@ if __name__ == '__main__':
             file_pool.submit(upload_file, src_file, des_file_list, multipart_uploaded_list)
 
     # 再次获取源文件列表和目标文件夹现存文件列表进行比较，每个文件大小一致，输出比较结果
-    spent_time = int(time.time() - start_time)
+    spent_time = int((time.time() - start_time)/60)
     if JobType == 'S3_TO_S3':
-        print(f'MISSION ACCOMPLISHED - Time: {spent_time}s - FROM: {SrcBucket}/{S3Prefix} TO {DesBucket}/{S3Prefix}')
+        print(f'MISSION ACCOMPLISHED - Time: {spent_time}mins - FROM: {SrcBucket}/{S3Prefix} TO {DesBucket}/{S3Prefix}')
         compare_s3_to_s3()
     if JobType == 'LOCAL_TO_S3':
-        print(f'MISSION ACCOMPLISHED - Time: {spent_time}s - FROM: {SrcDir} TO {DesBucket}/{S3Prefix}')
+        print(f'MISSION ACCOMPLISHED - Time: {spent_time}mins - FROM: {SrcDir} TO {DesBucket}/{S3Prefix}')
         compare_local_to_s3()
 
