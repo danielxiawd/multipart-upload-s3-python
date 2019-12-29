@@ -17,7 +17,7 @@ SrcProfileName = "us"  # 在~/.aws 中配置的能访问源S3的 profile name，
 
 """Advanced Configure"""
 Megabytes = 1024*1024
-ChunkSize = 50 * Megabytes  # 文件分片大小，不小于5M，单文件分片总数不能超过10000, type = int
+ChunkSize = 5 * Megabytes  # 文件分片大小，不小于5M，单文件分片总数不能超过10000, type = int
 MaxRetry = 30  # 单个Part上传失败后，最大重试次数, type = int
 MaxThread = 3  # 单文件同时上传的进程数量, type = int
 MaxParallelFile = 3  # 并行操作文件数量, type = int
