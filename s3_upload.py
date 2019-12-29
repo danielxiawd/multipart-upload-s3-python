@@ -466,7 +466,7 @@ def compare_local_to_s3():
         logger.warning(f'There are {len(deltaList)} files not in destination or not the same size, list:')
         for delta_file in deltaList:
             logger.warning(json.dumps(delta_file))
-
+    return
 
 def compare_s3_to_s3():
     logger.info('Comparing destination and source ...')
@@ -490,10 +490,12 @@ def compare_s3_to_s3():
         logger.warning(f'There are {len(deltaList)} files not in destination or not the same size, list:')
         for delta_file in deltaList:
             logger.warning(json.dumps(delta_file))
+    return
 
 
 # Main
 if __name__ == '__main__':
+    start_time = time.time()
     # 校验输入
     if JobType not in ['LOCAL_TO_S3', 'S3_TO_S3']:
         logger.warning('ERR JobType, check config file')
@@ -540,7 +542,7 @@ if __name__ == '__main__':
         logger.warning(f'{len(multipart_uploaded_list)} Unfinished upload, clean them and restart?')
         logger.warning('NOTICE: IF CLEAN, YOU CANNOT RESUME ANY UNFINISHED UPLOAD')
         if not DontAskMeToClean:
-            keyboard_input = input("CLEAN unfinished upload? Please confirm: (n/CLEAN)")
+            keyboard_input = input("CLEAN unfinished upload and restart(input CLEAN) or resume loading(press enter)? Please confirm: (n/CLEAN)")
         else:
             keyboard_input = 'no'
         if keyboard_input == 'CLEAN':
@@ -560,13 +562,13 @@ if __name__ == '__main__':
     with futures.ThreadPoolExecutor(max_workers=MaxParallelFile) as file_pool:
         for src_file in src_file_list:
             file_pool.submit(upload_file, src_file, des_file_list, multipart_uploaded_list)
-    if JobType == 'S3_TO_S3':
-        print(f'MISSION ACCOMPLISHED, FROM: {SrcBucket}/{S3Prefix} TO {DesBucket}/{S3Prefix}')
-    if JobType == 'LOCAL_TO_S3':
-        print(f'MISSION ACCOMPLISHED, FROM: {SrcDir} TO {DesBucket}/{S3Prefix}')
 
     # 再次获取源文件列表和目标文件夹现存文件列表进行比较，每个文件大小一致，输出比较结果
-    if JobType == 'LOCAL_TO_S3':
-        compare_local_to_s3()
+    spent_time = int(time.time() - start_time)
     if JobType == 'S3_TO_S3':
+        print(f'MISSION ACCOMPLISHED - Time: {spent_time}s - FROM: {SrcBucket}/{S3Prefix} TO {DesBucket}/{S3Prefix}')
         compare_s3_to_s3()
+    if JobType == 'LOCAL_TO_S3':
+        print(f'MISSION ACCOMPLISHED - Time: {spent_time}s - FROM: {SrcDir} TO {DesBucket}/{S3Prefix}')
+        compare_local_to_s3()
+
