@@ -16,6 +16,9 @@ MulitiTread S3 upload tools, Breakpoint resume supported, suitable for large fil
 开发语言：Python 3.7   
 by James Huang  
 
+![Architect](./img/img01.png)
+  
+![Architect](./img/img02.png)
 ## AWS 认证配置
  
 创建文件名为 `"credentials"` 于 ~/.aws/ 目录(`C:\Users\USER_NAME\.aws\` for Windows users) 并保存以下内容:
