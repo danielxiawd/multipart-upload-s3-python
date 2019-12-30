@@ -3,15 +3,14 @@
 MulitiTread S3 upload tools, Breakpoint resume supported, suitable for large files  
 
 从本地硬盘上传，或海外与中国区 AWS S3 存储之间互相拷贝，例如单个文件1G或500G。支持多级目录拷贝，具体功能包括：  
-* 本地或S3源文件的自动分片获取，并上传到目的S3，自动断点续传(分片级别)
-* 多文件并发传输，且每个文件再多线程并发传输
-* 每个分片上传完都进行MD5校验，以及每个文件上传完进行分片合并时再进行一次MD5校验
-* 网络超时自动多次重传，次数可设置。重试采用递增延迟，延迟间隔递增=次数*5秒
-* 可以指定单一文件拷贝，也可以目录下的全部文件拷贝，自动遍历下级子目录
-* 可选设置跳过太小的文件（小于单个分片的大小）
-* 程序中断，重启启动程序后，程序会查询S3上已完成的分片来进行核对。自动重传未完成的分片
+* 本地文件或S3源文件的自动分片获取，多线程并发上传到目的S3再合并文件。
+* 多文件并发传输，且每个文件再多线程并发传输，充分压榨带宽。S3_TO_S3 中间只过内存，不落盘。
+* 网络超时自动多次重传。重试采用递增延迟，延迟间隔=次数*5秒。程序中断重启后自动查询S3上已有分片，断点续传(分片级别)。每个分片上传都在S3端进行MD5校验，每个文件上传完进行分片合并时可选再进行一次S3的MD5与本地进行二次校验，保证可靠传输。
+* 自动遍历下级子目录，也可以指定单一文件拷贝。
+* 可设置S3存储级别，如：标准、S3-IA、Glacier或深度归档。
+* 可设置输出消息级别，如设置WARNING级别，则只输出你最关注的信息。
 --------  
-* 注意 ChunkSize 的大小设置。AWS S3 的 Multi_part_upload API 最大只支持10,000个分片。例如设置 ChunkSize 5MB 最大只能支持单个文件 50GB，如果要传单个文件 500GB，则需要设置 ChunkSize 50MB。
+* 注意 ChunkSize 的大小设置。由于 AWS S3 API 最大只支持单文件10,000个分片。例如设置 ChunkSize 5MB 最大只能支持单个文件 50GB，如果要传单个文件 500GB，则需要设置 ChunkSize 至少为 50MB。
 * 注意 如果某个文件传输到一半，你要修改 ChunkSize 的话。请中断，然后在启动时选择CLEAN unfinished upload，程序会清除未完成文件，并重新上传整个文件，否则文件断点会不正确。  
 
 开发语言：Python 3.7   
@@ -45,19 +44,26 @@ See the [Security Credentials](http://aws.amazon.com/security-credentials) page 
 ## 应用配置
 
 修改配置 `s3_upload_config.py`
-上面配置的 profile name 填入对应源和目的 profile name 项
+* 上面配置的 profile name 填入对应源和目的 profile name 项，例如：  
+```python
+SrcProfileName = 'beijing'
+DesProfileName = 'oregon'
+```
+* 设置上传方式：   
+```python
+JobType = 'LOCAL_TO_S3' 或 'S3_TO_S3'
+```
+* 设置源文件路径和上传的目的地址，以及其他可选配置
 
 ## 运行应用
-
-程序启动后会对源文件目录下的文件读取，并逐个进行分片和上传，你需要有一个能上传文件的Bucket
-
-    python3 s3_upload.py
-
+```bash
+python3 s3_upload.py
+```
 ## Requirements
 
 该工具需要先安装 `boto3`, the AWS SDK for Python，可以用 pip 安装
 
-    pip install boto3
+    pip install boto3 --user
 
 详见 [boto3](https://github.com/boto/boto3) github page
 for more information on getting your keys. For more information on configuring `boto3`,
@@ -73,73 +79,6 @@ service. If you run into 'Access Denied' errors while running this sample, pleas
 5. Re-run the application. Now your user should have the right permissions to run the sample.
 
 Please be aware of the [restrictions for bucket names](http://docs.aws.amazon.com/AmazonS3/latest/dev/BucketRestrictions.html) when you start creating your own buckets.
-
-## 配置文件示例 S3 copy to S3
-```
-"""Basic Configure"""
-JobType = "S3_TO_S3"  # 'LOCAL_TO_S3' | 'S3_TO_S3'
-SrcFileIndex = "*"  # 指定要上传的文件的文件名, type = str，Upload全部文件则用 "*"
-S3Prefix = "multipart/"  # S3_TO_S3源S3的Prefix，LOCAL_TO_S3则为目标S3的Prefix, type = str
-DesProfileName = "cn"  # 在~/.aws 中配置的能访问目标S3的 profile name
-DesBucket = "my-cn-bucket"  # 目标文件bucket, type = str
-
-"""Configure for LOCAL_TO_S3"""
-SrcDir = "no_used"
-# 原文件本地存放目录, S3_TO_S3则该字段无效 type = str
-
-"""Configure for S3_TO_S3"""
-SrcBucket = "my-us-bucket"  # 源Bucket，LOCAL_TO_S3则本字段无效
-SrcProfileName = "us"  # 在~/.aws 中配置的能访问源S3的 profile name，LOCAL_TO_S3则本字段无效
-
-"""Advanced Configure"""
-Megabytes = 1024*1024
-ChunkSize = 50 * Megabytes  # 文件分片大小，不小于5M，单文件分片总数不能超过10000, type = int
-MaxRetry = 30  # 单个Part上传失败后，最大重试次数, type = int
-MaxThread = 3  # 单文件同时上传的进程数量, type = int
-MaxParallelFile = 3  # 并行操作文件数量, type = int
-# 即同时并发的进程数 = MaxParallelFile * MaxThread
-IgnoreSmallFile = False  # 是否跳过小于chunksize的小文件, type = bool
-StorageClass = "STANDARD"
-# 'STANDARD'|'REDUCED_REDUNDANCY'|'STANDARD_IA'|'ONEZONE_IA'|'INTELLIGENT_TIERING'|'GLACIER'|'DEEP_ARCHIVE'
-ifVerifyMD5 = False
-# 整个文件完成上传合并之后再次进行整个文件的ETag校验MD5。该开关不影响每个分片上传时候的MD5校验。
-# 对于S3_TO_S3，该开关True会在断点续传的时候重新下载所有已传过的分片来计算MD5
-DontAskMeToClean = False  # False 遇到存在现有的未完成upload时，不再询问是否Clean，默认不Clean，自动续传
-LoggingLevel = "INFO"  # 日志输出级别 'WARNING' | 'INFO' | 'DEBUG'
-```
-## 配置文件示例 local copy to S3
-```
-"""Basic Configure"""
-JobType = "LOCAL_TO_S3"  # 'LOCAL_TO_S3' | 'S3_TO_S3'
-SrcFileIndex = "*"  # 指定要上传的文件的文件名, type = str，Upload全部文件则用 "*"
-S3Prefix = "multipart/"  # S3_TO_S3源S3的Prefix，LOCAL_TO_S3则为目标S3的Prefix, type = str
-DesProfileName = "us"  # 在~/.aws 中配置的能访问目标S3的 profile name
-DesBucket = "my-us-bucket"  # 目标文件bucket, type = str
-
-"""Configure for LOCAL_TO_S3"""
-SrcDir = "/Users/huangzb/Downloads/"
-# 原文件本地存放目录, S3_TO_S3则该字段无效 type = str
-
-"""Configure for S3_TO_S3"""
-SrcBucket = "no"  # 源Bucket，LOCAL_TO_S3则本字段无效
-SrcProfileName = "no"  # 在~/.aws 中配置的能访问源S3的 profile name，LOCAL_TO_S3则本字段无效
-
-"""Advanced Configure"""
-Megabytes = 1024*1024
-ChunkSize = 50 * Megabytes  # 文件分片大小，不小于5M，单文件分片总数不能超过10000, type = int
-MaxRetry = 30  # 单个Part上传失败后，最大重试次数, type = int
-MaxThread = 3  # 单文件同时上传的进程数量, type = int
-MaxParallelFile = 3  # 并行操作文件数量, type = int
-# 即同时并发的进程数 = MaxParallelFile * MaxThread
-IgnoreSmallFile = False  # 是否跳过小于chunksize的小文件, type = bool
-StorageClass = "STANDARD"
-# 'STANDARD'|'REDUCED_REDUNDANCY'|'STANDARD_IA'|'ONEZONE_IA'|'INTELLIGENT_TIERING'|'GLACIER'|'DEEP_ARCHIVE'
-ifVerifyMD5 = False
-# 整个文件完成上传合并之后再次进行整个文件的ETag校验MD5。该开关不影响每个分片上传时候的MD5校验。
-# 对于S3_TO_S3，该开关True会在断点续传的时候重新下载所有已传过的分片来计算MD5
-DontAskMeToClean = False  # False 遇到存在现有的未完成upload时，不再询问是否Clean，默认不Clean，自动续传
-LoggingLevel = "INFO"  # 日志输出级别 'WARNING' | 'INFO' | 'DEBUG'
-```
 
 ## License
 

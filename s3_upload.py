@@ -569,10 +569,10 @@ if __name__ == '__main__':
     time_h, time_m = divmod(time_m, 60)
     if JobType == 'S3_TO_S3':
         print(
-            f'\033[0;34;1mMISSION ACCOMPLISHED\033[0m - Time: {time_h}:{time_m}:{time_s} - FROM: {SrcBucket}/{S3Prefix} TO {DesBucket}/{S3Prefix}')
+            f'\033[0;34;1mMISSION ACCOMPLISHED - Time: {time_h}H:{time_m}M:{time_s}S \033[0m- FROM: {SrcBucket}/{S3Prefix} TO {DesBucket}/{S3Prefix}')
         compare_s3_to_s3()
     if JobType == 'LOCAL_TO_S3':
         print(
-            f'\033[0;34;1mMISSION ACCOMPLISHED\033[0m - Time: {time_h}:{time_m}:{time_s} - FROM: {SrcDir} TO {DesBucket}/{S3Prefix}')
+            f'\033[0;34;1mMISSION ACCOMPLISHED - Time: {time_h}H:{time_m}M:{time_s}S \033[0m- FROM: {SrcDir} TO {DesBucket}/{S3Prefix}')
         compare_local_to_s3()
 
