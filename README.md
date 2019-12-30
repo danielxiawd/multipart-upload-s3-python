@@ -1,6 +1,6 @@
 # AWS S3 多线程断点续传工具 v1.0  
 适合批量的大文件断点续传到 AWS S3  
-MulitiTread S3 upload tools, Breakpoint resume supported, suitable for large files  
+Muliti-thread S3 upload tool, breaking-point resume supported, suitable for large files  
 
 从本地硬盘上传，或海外与中国区 AWS S3 存储之间互相拷贝，例如单个文件1G或500G。支持多级目录拷贝，具体功能包括：  
 * 本地文件或S3源文件的自动分片获取，多线程并发上传到目的S3再合并文件。
