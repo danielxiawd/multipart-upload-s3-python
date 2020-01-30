@@ -47,11 +47,11 @@ def get_local_file_list():
         else:
             file_size = os.path.getsize(os.path.join(SrcDir, SrcFileIndex))
             __src_file_list = [{
-                "Key": srcfileIndex,
+                "Key": SrcFileIndex,
                 "Size": file_size
             }]
     except Exception as err:
-        logger.error('Can not get source files. ERR:'+str(err))
+        logger.error('Can not get source files. ERR: '+str(err))
         sys.exit(0)
     if not __src_file_list:
         logger.error('Source file empty.')
@@ -101,11 +101,26 @@ def head_s3_single_file(s3_client, bucket):
     try:
         response_fileList = s3_client.head_object(
             Bucket=bucket,
-            Key=S3Prefix
+            Key=S3Prefix+SrcFileIndex
         )
         file = [{
-            "Key": S3Prefix,
+            "Key": S3Prefix+SrcFileIndex,
             "Size": response_fileList["ContentLength"]
+        }]
+    except Exception as err:
+        logger.error(str(err))
+        sys.exit(0)
+    return file
+
+
+def head_oss_single_file(__ali_bucket):
+    try:
+        response_fileList = __ali_bucket.head_object(
+            key=S3Prefix+SrcFileIndex
+        )
+        file = [{
+            "Key": S3Prefix+SrcFileIndex,
+            "Size": response_fileList.content_length
         }]
     except Exception as err:
         logger.error(str(err))
@@ -585,7 +600,10 @@ def compare_buckets():
         else:
             fileList = head_s3_single_file(s3_src_client, SrcBucket)
     if JobType == 'ALIOSS_TO_S3':
-        fileList = get_ali_oss_file_list(ali_bucket)
+        if SrcFileIndex == "*":
+            fileList = get_ali_oss_file_list(ali_bucket)
+        else:
+            fileList = head_oss_single_file(ali_bucket)
     desFilelist = get_s3_file_list(s3_dest_client, DesBucket)
     deltaList = []
     for source_file in fileList:
@@ -645,7 +663,10 @@ if __name__ == '__main__':
         else:
             src_file_list = head_s3_single_file(s3_src_client, SrcBucket)
     elif JobType == 'ALIOSS_TO_S3':
-        src_file_list = get_ali_oss_file_list(ali_bucket)
+        if SrcFileIndex == "*":
+            src_file_list = get_ali_oss_file_list(ali_bucket)
+        else:
+            src_file_list = head_oss_single_file(ali_bucket)
 
     # 获取目标s3现存文件列表
     des_file_list = get_s3_file_list(s3_dest_client, DesBucket)
