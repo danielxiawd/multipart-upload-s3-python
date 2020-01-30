@@ -1,4 +1,4 @@
-# AWS S3 MultiThread Resume Upload Tool 多线程断点续传工具 v1.1   
+# AWS S3 MultiThread Resume Upload Tool v1.1  (S3多线程断点续传)   
 Muliti-thread S3 upload tool, breaking-point resume supported, suitable for large files  
 适合批量的大文件断点续传到 AWS S3  
 
@@ -36,7 +36,7 @@ Features:
 * ChunkSize setting. Because AWS S3 only support 10,000 parts for one single file, so e.g. ChunkSize 5MB can only support single file max 50GB, if you need to upload single file size 500GB, then you need ChunkSize at least 50MB  
 注意 ChunkSize 的大小设置。由于 AWS S3 API 最大只支持单文件10,000个分片。例如设置 ChunkSize 5MB 最大只能支持单个文件 50GB，如果要传单个文件 500GB，则需要设置 ChunkSize 至少为 50MB。  
 
-* If you need to change ChunkSize when files are transmitting, please stop application and restart, then select "CLEAN unfinished upload". Application will clean and re-upload all unfinished files.
+* If you need to change ChunkSize when files are transmitting, please stop application and restart, then select "CLEAN unfinished upload". Application will clean and re-upload all unfinished files.  
 注意 如果某个文件传输到一半，你要修改 ChunkSize 的话。请中断，然后在启动时选择CLEAN unfinished upload，程序会清除未完成文件，并重新上传整个文件，否则文件断点会不正确。  
 
 Language: Python 3.7   
