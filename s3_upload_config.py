@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """Basic Configure"""
-JobType = "S3_TO_S3"  # 'LOCAL_TO_S3' | 'S3_TO_S3'
+JobType = "S3_TO_S3"  # 'LOCAL_TO_S3' | 'S3_TO_S3' | 'ALIOSS_TO_S3'
 SrcFileIndex = "*"  # 指定要上传的文件的文件名, type = str，Upload全部文件则用 "*"
 S3Prefix = "multipart/"  # S3_TO_S3源S3的Prefix，LOCAL_TO_S3则为目标S3的Prefix, type = str
 DesProfileName = "cn"  # 在~/.aws 中配置的能访问目标S3的 profile name
@@ -14,6 +14,12 @@ SrcDir = "/Users/huangzb/Downloads/"
 """Configure for S3_TO_S3"""
 SrcBucket = "my-us-bucket"  # 源Bucket，LOCAL_TO_S3则本字段无效
 SrcProfileName = "us"  # 在~/.aws 中配置的能访问源S3的 profile name，LOCAL_TO_S3则本字段无效
+
+"""Configure for ALIOSS_TO_S3"""
+ali_SrcBucket = "img-process"  # 阿里云OSS 源Bucket，LOCAL_TO_S3/S3_TO_S3则本字段无效
+ali_access_key_id = "xxxxxxxxxxx"  # 阿里云 RAM 用户访问密钥
+ali_access_key_secret = "xxxxxxxxxxxx"
+ali_endpoint = "oss-cn-beijing.aliyuncs.com"  # OSS endpoint，在OSS控制台界面可以找到
 
 """Advanced Configure"""
 Megabytes = 1024*1024

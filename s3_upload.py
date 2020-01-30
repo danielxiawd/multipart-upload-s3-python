@@ -15,6 +15,8 @@ from s3_upload_config import *
 import time
 import hashlib
 import logging
+if JobType == 'ALIOSS_TO_S3':
+    import oss2  # for Ali Cloud Oss storage download
 
 # Configure logging
 logger = logging.getLogger()
@@ -109,6 +111,42 @@ def head_s3_single_file(s3_client, bucket):
         logger.error(str(err))
         sys.exit(0)
     return file
+
+
+def get_ali_oss_file_list(__ali_bucket):
+    logger.info('Get oss file list '+ali_SrcBucket)
+    __des_file_list = []
+    try:
+        response_fileList = __ali_bucket.list_objects(
+            prefix=S3Prefix,
+            max_keys=1000
+        )
+
+        if len(response_fileList.object_list) != 0:
+            for n in response_fileList.object_list:
+                if n.key[-1] != '/':      # Key以"/“结尾的是子目录，不处理
+                    __des_file_list.append({
+                        "Key": n.key,
+                        "Size": n.size
+                    })
+            while response_fileList.is_truncated:
+                response_fileList = __ali_bucket.list_objects(
+                    prefix=S3Prefix,
+                    max_keys=1000,
+                    marker=response_fileList.next_marker
+                )
+                for n in response_fileList.object_list:
+                    if n.key[-1] != '/':  # Key以"/“结尾的是子目录，不处理
+                        __des_file_list.append({
+                            "Key": n.key,
+                            "Size": n.size
+                        })
+        else:
+            logger.info('File list is empty in the ali_oss bucket')
+    except Exception as err:
+        logger.error(str(err))
+        sys.exit(0)
+    return __des_file_list
 
 
 def get_uploaded_list(s3_client):
@@ -259,10 +297,11 @@ def checkPartnumberList(srcfile, uploadId):
     return partnumberList
 
 
+# split the file into a virtual part list of index, each index is the start point of the file
 def split(srcfile):
     partnumber = 1
     indexList = [0]
-    while ChunkSize * partnumber < srcfile["Size"]:
+    while ChunkSize * partnumber < srcfile["Size"]: # 如果刚好是"="，则无需再分下一part，所以这里不能用"<="
         indexList.append(ChunkSize * partnumber)
         partnumber += 1
     if partnumber > 10000:
@@ -272,6 +311,7 @@ def split(srcfile):
     return indexList
 
 
+# upload parts in the list
 def uploadPart(uploadId, indexList, partnumberList, srcfile):
     partnumber = 1  # 当前循环要上传的Partnumber
     total = len(indexList)
@@ -285,13 +325,16 @@ def uploadPart(uploadId, indexList, partnumberList, srcfile):
                 dryrun = False
             else:
                 dryrun = True
-            # upload 1 part/thread, or dryrun to caculate md5
+            # upload 1 part/thread, or dryrun to only caculate md5
             if JobType == 'LOCAL_TO_S3':
                 pool.submit(uploadThread, uploadId, partnumber,
                             partStartIndex, srcfile["Key"], total, md5list, dryrun, complete_list)
             elif JobType == 'S3_TO_S3':
                 pool.submit(download_uploadThread, uploadId, partnumber,
                             partStartIndex, srcfile["Key"], total, md5list, dryrun, complete_list)
+            elif JobType == 'ALIOSS_TO_S3':
+                pool.submit(alioss_download_uploadThread, uploadId, partnumber,
+                            partStartIndex, srcfile["Key"], srcfile["Size"], total, md5list, dryrun, complete_list)
             partnumber += 1
     # 线程池End
     logger.info(f'All parts uploaded - {srcfile["Key"]} - size: {srcfile["Size"]}')
@@ -343,6 +386,7 @@ def uploadThread(uploadId, partnumber, partStartIndex, srcfileKey, total, md5lis
     return
 
 
+# download part from src. s3 and upload to dest. s3
 def download_uploadThread(uploadId, partnumber, partStartIndex, srcfileKey, total, md5list, dryrun, complete_list):
     if ifVerifyMD5 or not dryrun:
         # 下载文件
@@ -359,6 +403,70 @@ def download_uploadThread(uploadId, partnumber, partStartIndex, srcfileKey, tota
                     Range="bytes="+str(partStartIndex)+"-"+str(partStartIndex+ChunkSize-1)
                     )
                 getBody = response_get_object["Body"].read()
+                chunkdata_md5 = hashlib.md5(getBody)
+                md5list[partnumber-1] = chunkdata_md5
+                break
+            except Exception as err:
+                retryTime += 1
+                logger.warning(f"DownloadThreadFunc - {srcfileKey} - Exception log: {str(err)}")
+                logger.warning(f"Download part fail, retry part: {partnumber} Attempts: {retryTime}")
+                if retryTime > MaxRetry:
+                    logger.error(f"Quit for Max Download retries: {retryTime}")
+                    sys.exit(0)
+                time.sleep(5*retryTime)  # 递增延迟重试
+    if not dryrun:
+        # 上传文件
+        print(f'\033[0;32;1m    --->Uploading\033[0m {srcfileKey} - {partnumber}/{total}')
+        retryTime = 0
+        while retryTime <= MaxRetry:
+            try:
+                s3_dest_client.upload_part(
+                    Body=getBody,
+                    Bucket=DesBucket,
+                    Key=srcfileKey,
+                    PartNumber=partnumber,
+                    UploadId=uploadId,
+                    ContentMD5=base64.b64encode(chunkdata_md5.digest()).decode('utf-8')
+                )
+                break
+            except Exception as err:
+                retryTime += 1
+                logger.warning(f"UploadThreadFunc - {srcfileKey} - Exception log: {str(err)}")
+                logger.warning(f"Upload part fail, retry part: {partnumber} Attempts: {retryTime}")
+                if retryTime > MaxRetry:
+                    logger.error(f"Quit for Max Download retries: {retryTime}")
+                    sys.exit(0)
+                time.sleep(5*retryTime)  # 递增延迟重试
+    complete_list.append(partnumber)
+    if not dryrun:
+        print(f'\033[0;34;1m        --->Complete\033[0m {srcfileKey} '
+              f'- {partnumber}/{total} \033[0;34;1m{len(complete_list)/total:.2%}\033[0m')
+    return
+
+
+# download part from src. ali_oss and upload to dest. s3
+def alioss_download_uploadThread(uploadId, partnumber, partStartIndex, srcfileKey, srcfileSize, total, md5list, dryrun, complete_list):
+    if ifVerifyMD5 or not dryrun:
+        # 下载文件
+        if not dryrun:
+            print(f"\033[0;33;1m--->Downloading\033[0m {srcfileKey} - {partnumber}/{total}")
+        else:
+            print(f"\033[0;33;40m--->Downloading for verify MD5\033[0m {srcfileKey} - {partnumber}/{total}")
+        retryTime = 0
+        while retryTime <= MaxRetry:
+            try:
+                partEndIndex = partStartIndex+ChunkSize-1
+                if partEndIndex > srcfileSize:
+                    partEndIndex = srcfileSize-1
+                # Ali OSS 如果range结尾超出范围会变成从头开始下载全部(什么脑子？)，所以必须人工修改为FileSize-1
+                # 而S3或本地硬盘超出范围只会把结尾指针改为最后一个字节
+                response_get_object = ali_bucket.get_object(
+                    key=srcfileKey,
+                    byte_range=(partStartIndex, partEndIndex)
+                    )
+                getBody = b''
+                for chunk in response_get_object:
+                    getBody += chunk
                 chunkdata_md5 = hashlib.md5(getBody)
                 md5list[partnumber-1] = chunkdata_md5
                 break
@@ -468,12 +576,16 @@ def compare_local_to_s3():
             logger.warning(json.dumps(delta_file))
     return
 
-def compare_s3_to_s3():
+
+def compare_buckets():
     logger.info('Comparing destination and source ...')
-    if SrcFileIndex == "*":
-        fileList = get_s3_file_list(s3_src_client, SrcBucket)
-    else:
-        fileList = head_s3_single_file(s3_src_client, SrcBucket)
+    if JobType == 'S3_TO_S3':
+        if SrcFileIndex == "*":
+            fileList = get_s3_file_list(s3_src_client, SrcBucket)
+        else:
+            fileList = head_s3_single_file(s3_src_client, SrcBucket)
+    if JobType == 'ALIOSS_TO_S3':
+        fileList = get_ali_oss_file_list(ali_bucket)
     desFilelist = get_s3_file_list(s3_dest_client, DesBucket)
     deltaList = []
     for source_file in fileList:
@@ -497,7 +609,7 @@ def compare_s3_to_s3():
 if __name__ == '__main__':
     start_time = time.time()
     # 校验输入
-    if JobType not in ['LOCAL_TO_S3', 'S3_TO_S3']:
+    if JobType not in ['LOCAL_TO_S3', 'S3_TO_S3', 'ALIOSS_TO_S3']:
         logger.warning('ERR JobType, check config file')
         sys.exit(0)
 
@@ -505,6 +617,8 @@ if __name__ == '__main__':
     s3_dest_client = Session(profile_name=DesProfileName).client('s3')
     if JobType == 'S3_TO_S3':
         s3_src_client = Session(profile_name=SrcProfileName).client('s3')
+    elif JobType == 'ALIOSS_TO_S3':
+        ali_bucket = oss2.Bucket(oss2.Auth(ali_access_key_id, ali_access_key_secret), ali_endpoint, ali_SrcBucket)
 
     # 检查目标S3能否写入
     try:
@@ -530,6 +644,8 @@ if __name__ == '__main__':
             src_file_list = get_s3_file_list(s3_src_client, SrcBucket)
         else:
             src_file_list = head_s3_single_file(s3_src_client, SrcBucket)
+    elif JobType == 'ALIOSS_TO_S3':
+        src_file_list = get_ali_oss_file_list(ali_bucket)
 
     # 获取目标s3现存文件列表
     des_file_list = get_s3_file_list(s3_dest_client, DesBucket)
@@ -570,8 +686,12 @@ if __name__ == '__main__':
     if JobType == 'S3_TO_S3':
         print(
             f'\033[0;34;1mMISSION ACCOMPLISHED - Time: {time_h}H:{time_m}M:{time_s}S \033[0m- FROM: {SrcBucket}/{S3Prefix} TO {DesBucket}/{S3Prefix}')
-        compare_s3_to_s3()
-    if JobType == 'LOCAL_TO_S3':
+        compare_buckets()
+    elif JobType == 'ALIOSS_TO_S3':
+        print(
+            f'\033[0;34;1mMISSION ACCOMPLISHED - Time: {time_h}H:{time_m}M:{time_s}S \033[0m- FROM: {ali_SrcBucket}/{S3Prefix} TO {DesBucket}/{S3Prefix}')
+        compare_buckets()
+    elif JobType == 'LOCAL_TO_S3':
         print(
             f'\033[0;34;1mMISSION ACCOMPLISHED - Time: {time_h}H:{time_m}M:{time_s}S \033[0m- FROM: {SrcDir} TO {DesBucket}/{S3Prefix}')
         compare_local_to_s3()
